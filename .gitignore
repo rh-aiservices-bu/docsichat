@@ -1,0 +1,44 @@
+# --- OS junk ---
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+
+# --- Editors / IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# --- Secrets & credentials (never commit) ---
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+credentials.json
+secrets.json
+
+# --- Node (if tooling is added later) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Logs & temp ---
+*.log
+*.tmp
+*.bak
+.cache/
+coverage/
+
+# --- Build output (docsify needs none, but guard against stray artifacts) ---
+dist/
+build/
