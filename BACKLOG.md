@@ -43,11 +43,16 @@ stale within a day once already). File references: the settings page is now
 14. **Streaming render perf.** Queued — candidate for PluginP3 chain link.
 15. **"Interpreting your metrics" note.** In progress — StreamWidget agent (streaming.md prose).
 16. **Storage-failure warning.** Queued — StateCache chain link.
+17. **Model metadata.** Show `owned_by`/`created` from `/models` next to names. Demoted — near-zero participant value.
+18. **Curl variants for chat completions.** `curl.md` only generates the `GET {endpoint}/models` command; add generated basic/streaming completion curl from the saved prompt/model. Demoted — learning the API shape was not a chosen use; keep for docs+curl-twin completeness.
+19. **Raw-JSON toggle on chat results.** Demoted — see the raw-view decision (P1 item 5); only revisit if debugging demands it.
+20. **Vendor docsify locally + pin the exact version.** `docsify@5` floats on jsDelivr; venue wifi or an IT proxy that blocks the CDN leaves a blank page — this breaks the whole journey, not just polish. Also undocumented coupling: `mountSettingsHeader` hard-codes docsify's DOM (`main section.content`) and silently stops matching if 5.x changes it. Pinned CDN version is the cheap partial — DONE as pin (b51593c); full vendoring still open.
 21. **Manual dark-mode toggle — DONE 2026-09-22.** Cycle OS → light → dark, persisted under `docsichat:api:ui:theme`, ES5, aria-label/title per state. Committed b51593c.
 22. **404 page — DONE 2026-09-22.** `notFoundPage: true` (verified key against docsify v5) + `docs/_404.md` with home link. Committed b51593c.
 23. **Content-Security-Policy meta — DONE 2026-09-22.** Added with Google Fonts additions the first draft missed (style-src/font-src); verified zero console errors + all features working under CSP. Committed b51593c.
 24. **Accessibility pass.** Focus management after widget mount, `aria-live` on streamed output, visible focus states on custom buttons.
 25. **Key-preview entropy note.** `PREVIEW_LEN = 10` feeds the Settings table, form placeholder, and the persistent header on every page. JWT-shaped tokens (constant `eyJ…` prefix) leak nothing, but 10 chars of a short opaque secret is shoulder-surfable in a workshop room. Shorten to 4–6 chars or detect the `eyJ` prefix, and say in `configuration.md` what the preview reveals.
+26. **Token estimate before send.** Rough chars/4 hint in the test forms.
 27. **Dev-server cache fix.** In progress — Tooling agent (scripts/serve.py).
 28. **Smoke-check script.** In progress — Tooling agent (scripts/smoke-check.js).
 29. **Sidebar grouping.** Flat list today; group into Configuration / Playground as pages grow.
