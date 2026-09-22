@@ -110,11 +110,69 @@
     });
   }
 
+  function shellEscape(value) {
+    // Escape for a double-quoted shell argument.
+    return String(value).replace(/[\\"$`]/g, '\\$&');
+  }
+
+  function modelsUrl(endpoint) {
+    return endpoint.replace(/\/+$/, '') + '/models';
+  }
+
+  function curlCommand(keyValue) {
+    return (
+      'curl -s ' + modelsUrl(get('endpoint')) + ' \\\n' +
+      '  -H "Authorization: Bearer ' + shellEscape(keyValue) + '"'
+    );
+  }
+
+  function fallbackCopy(text, done) {
+    var textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try { document.execCommand('copy'); done(); } catch (e) { /* clipboard unavailable */ }
+    document.body.removeChild(textarea);
+  }
+
+  function mountCurl(container) {
+    var endpoint = get('endpoint');
+    var key = get('key');
+    if (!endpoint || !key) {
+      container.innerHTML =
+        '<p class="api-config-empty">Set your <a href="#/settings">API Endpoint and API Key</a> first — the command needs both.</p>';
+      return;
+    }
+    // Displayed command masks the key; the copy button builds the real command from storage.
+    container.innerHTML =
+      '<pre class="api-curl-pre"><code>' + escapeHtml(curlCommand(key.slice(0, PREVIEW_LEN) + MASK)) + '</code></pre>' +
+      '<button type="button" class="api-curl-copy">Copy command</button>' +
+      '<p class="api-config-status" role="status"></p>';
+
+    container.querySelector('.api-curl-copy').addEventListener('click', function () {
+      var status = container.querySelector('.api-config-status');
+      var full = curlCommand(key);
+      var done = function () {
+        status.textContent = 'Copied — the clipboard contains your full API key.';
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(full).then(done, function () { fallbackCopy(full, done); });
+      } else {
+        fallbackCopy(full, done);
+      }
+    });
+  }
+
   function apiConfigPlugin(hook) {
     hook.doneEach(function () {
       refreshPlaceholders(document);
       var container = document.querySelector('#api-config-form');
       if (container) mountForm(container);
+      var curlContainer = document.querySelector('#api-curl-command');
+      if (curlContainer) mountCurl(curlContainer);
     });
   }
 
