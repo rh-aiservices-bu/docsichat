@@ -496,7 +496,23 @@
       if (done) done();
     });
   }
-  function reasoningValue(parsed) {
+
+  function parseUsage(usage) {
+    // Normalize OpenAI-shaped usage (prompt_tokens/completion_tokens/total_tokens)
+    // plus gateway variants (input_tokens/output_tokens, reasoning token details).
+    usage = usage || {};
+    var prompt = usage.prompt_tokens || usage.input_tokens || 0;
+    var completion = usage.completion_tokens || usage.output_tokens || 0;
+    return {
+      prompt: prompt,
+      completion: completion,
+      total: usage.total_tokens || prompt + completion,
+      reasoning:
+        (usage.completion_tokens_details && usage.completion_tokens_details.reasoning_tokens) || 0,
+      reasoningTokens: usage.reasoning_tokens || 0
+    };
+  }
+   function reasoningValue(parsed) {
     return parsed.reasoning || parsed.reasoningTokens || 0;
   }
 
