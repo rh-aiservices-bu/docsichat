@@ -118,41 +118,118 @@
 
 /* docsichat: global settings header + API test widgets (Basic Chat, Streaming) */
 
-/* Sticky settings header inside the docsify content column */
+/* Sticky settings header inside the docsify content column: a toolbar band
+   with the two saved variables as labeled fields (flex-grow so the row
+   fills the band), Save/Clear/Test on one line, and the Configuration
+   link as the accent button. */
 .api-settings-header {
   position: sticky;
   top: 0;
   z-index: 5;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem;
   margin: 0 0 1rem;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.85rem;
-  background: var(--color-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  padding: 0.6rem 1.25rem;
+  background: var(--color-mono-1);
+  border-bottom: 1px solid var(--border-color);
 }
 
-.api-settings-label,
-.api-settings-sep {
+.api-header-form {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.5rem;
+}
+
+.api-header-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 2 1 18rem;
+}
+
+.api-header-field + .api-header-field {
+  flex: 1 1 12rem;
+}
+
+.api-header-field label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--color-mono-6);
 }
 
-.api-settings-label {
-  font-weight: 600;
+.api-header-field input {
+  margin: 0;
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background: var(--color-bg);
+  color: inherit;
+  font-size: 0.85rem;
+  font-family: inherit;
 }
 
-.api-settings-link {
+.api-header-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
   margin-left: auto;
-  color: var(--theme-color);
+}
+
+.api-header-actions button {
+  margin: 0;
+  padding: 0.3rem 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--theme-color) 35%, var(--border-color));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--theme-color) 18%, var(--color-bg));
+  color: inherit;
+  font-size: 0.85rem;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.api-header-actions button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.api-header-status {
+  flex-basis: 100%;
+  order: 10;
+  min-height: 1em;
+  font-size: 0.8rem;
+  color: var(--color-mono-6);
+}
+
+.api-header-status:empty {
+  display: none;
+}
+
+.api-header-link {
+  align-self: flex-end;
+  padding: 0.4rem 1.1rem;
+  border: 1px solid var(--theme-color);
+  border-radius: 3px;
+  background: var(--theme-color);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.api-header-link:hover {
+  filter: brightness(0.94);
   text-decoration: none;
 }
 
-.api-settings-link:hover {
-  text-decoration: underline;
+/* Visible keyboard focus for header controls (docsify core clears it) */
+.api-header-field input:focus-visible,
+.api-header-actions button:focus-visible,
+.api-header-link:focus-visible {
+  outline: 3px solid var(--theme-color-3, #0066cc);
+  outline-offset: 2px;
 }
 
 /* API test form (Basic Chat + Streaming pages) */

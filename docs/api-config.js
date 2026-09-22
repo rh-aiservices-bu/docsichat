@@ -14,8 +14,10 @@
   var STORAGE_PREFIX = 'docsichat:api:';
   var FIELDS = ['endpoint', 'key'];
   var MASK = '••••••••';
+  var MASK_LEN = 8; /* MASK char count; MASK_INFIX must match */
+  var MASK_INFIX = MASK;
   var PREVIEW_LEN = 6;
-  var ENDPOINT_PREVIEW_LEN = 44;
+  var ENDPOINT_PREVIEW_LEN = 48;
 
   function get(field) {
     try {
@@ -181,8 +183,8 @@
 
   function middleTruncate(value, max) {
     if (value.length <= max) return value;
-    var keep = Math.floor((max - 1) / 2);
-    return value.slice(0, keep) + '…' + value.slice(-keep);
+    var keep = Math.floor((max - 1 - MASK_LEN) / 2);
+    return value.slice(0, keep) + MASK_INFIX + value.slice(-keep);
   }
 
   function renderValue(field) {
@@ -279,6 +281,7 @@
         set('endpoint', '');
         mountForm(container);
         refreshPlaceholders(document);
+        mountSettingsHeader();
         container.querySelector('.api-config-status').textContent = 'Saved values cleared.';
       });
     }
@@ -288,20 +291,23 @@
       event.preventDefault();
       var keyInput = container.querySelector('#api-config-key');
 
-      // Untouched preview input keeps the stored URL; any typed value replaces it.
-      var endpointValue = endpointInput.hasAttribute('data-preview')
-        ? get('endpoint')
-        : endpointInput.value;
-      set('endpoint', normalizeEndpoint(endpointValue.trim()));
+      if (endpointInput) {
+        // Untouched preview input keeps the stored URL; any typed value replaces it.
+        var endpointValue = endpointInput.hasAttribute('data-preview')
+          ? get('endpoint')
+          : endpointInput.value;
+        set('endpoint', normalizeEndpoint(endpointValue.trim()));
+      }
       // Empty key field keeps the existing key; typing replaces it.
-      if (keyInput.value) {
+      if (keyInput && keyInput.value) {
         set('key', keyInput.value);
         keyInput.value = '';
       }
 
-      // Re-mount so placeholders and the key field state reflect saved values.
+      // Re-mount so placeholders, the key field state, and the header reflect saved values.
       mountForm(container);
       refreshPlaceholders(document);
+      mountSettingsHeader();
       container.querySelector('.api-config-status').textContent =
         'Saved locally. The key preview shows the first 6 characters (or ' +
         'eyJ… for JWT-shaped keys) followed by a mask.';
@@ -941,14 +947,38 @@ if (metrics.tokensPerSec != null) {
     });
   }
 
+  /* ---------- Global settings header (all pages): toolbar with the two
+     saved variables as editable fields, matching the settings form's
+     preview/replace semantics. ---------- */
+
   function settingsHeaderHtml() {
+    var endpoint = get('endpoint');
+    var hasKey = Boolean(get('key'));
+    var hasAny = Boolean(endpoint) || hasKey;
+    var endpointPreview = middleTruncate(endpoint, ENDPOINT_PREVIEW_LEN);
     return (
-      '<span class="api-settings-label">Endpoint:</span> ' +
-      '<span class="api-config" data-field="endpoint"></span>' +
-      '<span class="api-settings-sep">·</span>' +
-      '<span class="api-settings-label">Key:</span> ' +
-      '<span class="api-config" data-field="key"></span>' +
-      '<a class="api-settings-link" href="#/configuration">Configuration</a>'
+      '<form class="api-header-form">' +
+      '<div class="api-header-field">' +
+      '<label for="api-header-endpoint">Endpoint</label>' +
+      '<input id="api-header-endpoint" name="endpoint" type="text" ' +
+      'placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false" ' +
+      'value="' + escapeHtml(endpointPreview) + '"' +
+      (endpointPreview !== endpoint ? ' data-preview="endpoint"' : '') + '>' +
+      '</div>' +
+      '<div class="api-header-field">' +
+      '<label for="api-header-key">Key</label>' +
+      '<input id="api-header-key" name="key" type="password" ' +
+      'autocomplete="new-password" spellcheck="false" placeholder="' +
+      (hasKey ? previewKey(get('key')) + ' — type to replace' : 'paste your API key') + '">' +
+      '</div>' +
+      '<div class="api-header-actions">' +
+      '<button type="submit">Save</button>' +
+      (hasAny ? '<button type="button" class="api-header-clear">Clear</button>' : '') +
+      '<button type="button" class="api-header-test">Test connection</button>' +
+      '</div>' +
+      '<span class="api-header-status" role="status"></span>' +
+      '<a class="api-header-link" href="#/configuration">Configuration</a>' +
+      '</form>'
     );
   }
 
@@ -965,6 +995,88 @@ if (metrics.tokensPerSec != null) {
     }
     header.innerHTML = settingsHeaderHtml();
     refreshPlaceholders(header);
+
+    var endpointInput = header.querySelector('#api-header-endpoint');
+    var keyInput = header.querySelector('#api-header-key');
+    var form = header.querySelector('form');
+
+    // Same preview/replace semantics as the settings form's endpoint field.
+    if (endpointInput) {
+      endpointInput.addEventListener('focus', function () {
+        if (endpointInput.hasAttribute('data-preview')) {
+          endpointInput.value = get('endpoint');
+        }
+        endpointInput.removeAttribute('data-preview');
+      });
+      endpointInput.addEventListener('input', function () {
+        endpointInput.removeAttribute('data-preview');
+      });
+      endpointInput.addEventListener('blur', function () {
+        // Focused-but-untouched: collapse back to the preview on blur.
+        var stored = get('endpoint');
+        if (endpointInput.value === stored) {
+          var preview = middleTruncate(stored, ENDPOINT_PREVIEW_LEN);
+          endpointInput.value = preview;
+          if (preview !== stored) endpointInput.setAttribute('data-preview', 'endpoint');
+        }
+      });
+    }
+
+    var clearBtn = header.querySelector('.api-header-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        set('key', '');
+        set('endpoint', '');
+        var formContainer = document.getElementById('api-config-form');
+        if (formContainer) mountForm(formContainer);
+        mountSettingsHeader();
+        refreshPlaceholders(document);
+      });
+    }
+
+    var testBtn = header.querySelector('.api-header-test');
+    if (testBtn) {
+      testBtn.addEventListener('click', function () {
+        var endpoint = get('endpoint');
+        var key = get('key');
+        var status = header.querySelector('.api-header-status');
+        if (!endpoint || !key) {
+          status.textContent = 'Save an endpoint and API key first — the test uses the saved values.';
+          return;
+        }
+        testBtn.disabled = true;
+        testBtn.textContent = 'Testing…';
+        checkConnection(endpoint, key, function (result) {
+          testBtn.disabled = false;
+          testBtn.textContent = 'Test connection';
+          status.textContent = result.ok
+            ? 'Connected — ' + result.models.length + ' model(s) at ' + normalizeEndpoint(endpoint) + '.'
+            : 'Connection failed: ' + result.reason;
+        });
+      });
+    }
+
+    if (!form) return;
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (endpointInput) {
+        // Untouched preview input keeps the stored URL; any typed value replaces it.
+        var endpointValue = endpointInput.hasAttribute('data-preview')
+          ? get('endpoint')
+          : endpointInput.value;
+        set('endpoint', normalizeEndpoint(endpointValue.trim()));
+      }
+      // Empty key field keeps the existing key; typing replaces it.
+      if (keyInput && keyInput.value) {
+        set('key', keyInput.value);
+        keyInput.value = '';
+      }
+      // Re-mount so the header inputs and the config form's state reflect saves.
+      var formContainer = document.getElementById('api-config-form');
+      if (formContainer) mountForm(formContainer);
+      mountSettingsHeader();
+      refreshPlaceholders(document);
+    });
   }
 
   function apiConfigPlugin(hook) {
