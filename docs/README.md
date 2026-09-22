@@ -8,6 +8,6 @@ Documentation site powered by [Docsify](https://github.com/docsifyjs/docsify) v5
 ## Local preview
 
 ```bash
-python3 -m http.server 3000 --directory docs
-# then open http://localhost:3000
+python3 -m http.server 3010 --directory docs
+# then open http://localhost:3010
 ```
