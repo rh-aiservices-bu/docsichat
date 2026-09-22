@@ -54,7 +54,8 @@ stale within a day once already). File references: the settings page is now
 23. **Content-Security-Policy meta — DONE 2026-09-22.** Added with Google Fonts additions the first draft missed (style-src/font-src); verified zero console errors + all features working under CSP. Committed b51593c.
 24. **Accessibility pass — DONE 2026-09-22.** aria-live='polite' + role='status' on the live stream panel, aria-label on Stop, shared :focus-visible outline rule for all custom buttons; no focus stealing. Committed d0e45f8.
 25. **Key-preview entropy note — DONE 2026-09-22.** PREVIEW_LEN 10→6; JWT keys render 'eyJ…' + mask; configuration.md prose matches. Committed d0e45f8.
-26. **Token estimate before send — DONE 2026-09-22.** Live '~N tokens est.' hint (chars/4) under the prompt textarea in both test forms. Committed d0e45f8.
+27. **Dev-server cache fix — DONE 2026-09-22.** scripts/serve.py sends Cache-Control: no-store on every response (GET/HEAD/404); do_HEAD resolves directories to index.html. Replaces the plain http.server workflow. Committed ca7a8eb.
+28. **Smoke-check script — DONE 2026-09-22.** scripts/smoke-check.js: standalone CDP smoke check; clean SKIP when no working CDP endpoint. Known machine limitation: Chrome 153 closes the DevTools WebSocket after the first command. Committed ca7a8eb.
 29. **Sidebar grouping — DONE 2026-09-22.** Configuration / Playground sections, all pages reachable. Committed d0e45f8.
 
 

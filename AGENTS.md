@@ -35,21 +35,16 @@ Docsify-based static documentation site for **docsichat** — an in-browser API 
 | `docs/*.md`, `docs/_sidebar.md` | Pages and grouped nav (Configuration / Playground); every `.md` in `docs/` is a route (`guide.md` → `#/guide`) |
 | `docs/index.html` | Entry point: pinned docsify, CSP meta, dark-mode toggle |
 | `scripts/serve.py` | Dev server: SimpleHTTPRequestHandler + `Cache-Control: no-store` on every response (replaces plain `http.server`) |
-| `scripts/smoke-check.js` | Standalone CDP smoke check (Node built-ins only): widget mounts, settings round-trip, key never unmasked, console errors; clean SKIP when no CDP endpoint |
-| `.gitignore` | OS/editor junk, secrets, `node_modules`, `__pycache__/` |
-
 ## Development Commands
-
-No `package.json`, no npm scripts, no build, no CI.
 
 ```sh
 # Serve locally (from repo root); port 3010 — 3000 is occupied by another project on this machine
-python3 scripts/serve.py        # no-store responses; no hard-reload dance
-# plain http.server works too but heuristic-caches edited plugin files (see gotcha below)
-# then open http://localhost:3010/   (docs/ is the site root; there is no /docs/ segment)
+python3 scripts/serve.py        # serves docs/ at http://localhost:3010/ (no path segment)
+# plain `python3 -m http.server 3010` from the REPO ROOT serves the same files at http://localhost:3010/docs/
+# then open http://localhost:3010/ (scripts/serve.py) or http://localhost:3010/docs/ (plain http.server)
 ```
 
-Deploy = push to the default branch; GitHub Pages serves `/docs` (`.nojekyll` present).
+Deploy = push to the default branch; GitHub Pages serves `docs/` at the project URL, e.g. `https://rh-aiservices-bu.github.io/docsichat/` (`.nojekyll` present). CORS probes used `https://rh-aiservices-bu.github.io` as the Pages origin — a subpath under the same origin.
 
 ## Code Conventions & Common Patterns
 
