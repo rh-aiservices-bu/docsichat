@@ -70,12 +70,12 @@ spec:
     name: <HTTPROUTE_NAME>
   defaults:
     strategy: merge                # coexist with MaaS-owned policies
-    when:
-    - predicate: "request.method != 'OPTIONS'"
     rules:
       authentication:
         anonymous:
           anonymous: {}            # documented no-op identity evaluator
+          when:
+          - predicate: "request.method == 'OPTIONS'"   # anonymous FOR PREFLIGHTS ONLY — real traffic keeps MaaS auth
 ```
 
 Apply and verify the preflight is no longer 401:
@@ -94,8 +94,15 @@ curl -sS -o /dev/null -D - -X OPTIONS "https://<HOST>/prelude-maas/<model>/chat/
 
 If the merge is ignored, try `overrides:` instead of `defaults:` (documented
 precedence semantics: overrides win over lower-targeting policies), or scope to the
-Gateway targetRef. [INFERENCE: MaaS controller reconciliation behavior with a second
-AuthPolicy on the same target is not doc-verified.]
+Gateway targetRef. [INFERENCE: (a) MaaS controller reconciliation behavior with a
+second AuthPolicy on the same target is not doc-verified; (b) the rule-level `when`
+predicate semantics (per-rule condition inside a defaults rule) come from the
+scout's read of the Kuadrant AuthPolicy CRD reference
+(https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/reference/authpolicy.md)
+and the anonymous-access user guide
+(https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/user-guides/auth/anonymous-access.md) —
+kuadrant.io itself 404'd on later re-checks, so re-source from these GitHub URLs
+if the rule-level `when` placement is rejected by the CRD.]
 
 ## Step 2 — add CORS response headers (EnvoyFilter)
 
