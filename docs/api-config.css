@@ -1,0 +1,56 @@
+/* docsichat: API config settings form + masked key display */
+.api-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 26rem;
+}
+
+.api-config-form label {
+  margin-top: 0.75rem;
+  font-weight: 600;
+}
+
+.api-config-form input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--docsify-border-color, #ccc);
+  border-radius: 4px;
+  font-size: 0.95rem;
+  background: var(--docsify-bg, #fff);
+  color: inherit;
+}
+
+.api-config-form button {
+  margin-top: 0.9rem;
+  padding: 0.45rem 1.1rem;
+  border: 1px solid var(--docsify-brand, #42b983);
+  border-radius: 4px;
+  background: var(--docsify-brand, #42b983);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.api-config-form button:hover {
+  filter: brightness(0.94);
+}
+
+.api-config-status {
+  font-size: 0.85rem;
+  color: var(--docsify-text-secondary, #7f8c8d);
+  margin-top: 0.5rem;
+}
+
+.api-config-empty {
+  color: var(--docsify-text-secondary, #7f8c8d);
+}
+
+.api-config {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  word-break: break-all;
+}
+
+.api-config[data-field='key'] {
+  letter-spacing: 0.15em;
+}
