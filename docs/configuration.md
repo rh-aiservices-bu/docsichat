@@ -1,4 +1,4 @@
-# Settings
+# Configuration
 
 Configure the connection to your API. Values are stored in this browser only.
 

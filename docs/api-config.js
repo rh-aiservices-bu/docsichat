@@ -1,7 +1,7 @@
 /**
  * docsichat API config plugin for Docsify v5.
  *
- * - Settings form (API Endpoint + API Key) injected on the settings page.
+ * - Settings form (API Endpoint + API Key) injected on the Configuration page.
  * - Values persist in localStorage (`docsichat:api:*`).
  * - Any docs page can render saved values with:
  *     <span class="api-config" data-field="endpoint"></span>
@@ -15,6 +15,7 @@
   var FIELDS = ['endpoint', 'key'];
   var MASK = '••••••••';
   var PREVIEW_LEN = 10;
+  var ENDPOINT_PREVIEW_LEN = 44;
 
   function get(field) {
     try {
@@ -49,12 +50,22 @@
       : MASK;
   }
 
+  function middleTruncate(value, max) {
+    if (value.length <= max) return value;
+    var keep = Math.floor((max - 1) / 2);
+    return value.slice(0, keep) + '…' + value.slice(-keep);
+  }
+
   function renderValue(field) {
     var value = get(field);
     if (!value) {
       return '<em class="api-config-empty">not set</em>';
     }
-    return field === 'key' ? previewKey(value) : escapeHtml(value);
+    if (field === 'key') return previewKey(value);
+    var truncated = middleTruncate(value, ENDPOINT_PREVIEW_LEN);
+    return truncated === value
+      ? escapeHtml(value)
+      : '<span title="' + escapeHtml(value) + '">' + escapeHtml(truncated) + '</span>';
   }
 
   function refreshPlaceholders(root) {
@@ -70,12 +81,14 @@
     var endpoint = get('endpoint');
     var hasKey = Boolean(get('key'));
     var hasAny = Boolean(endpoint) || hasKey;
+    var endpointPreview = middleTruncate(endpoint, ENDPOINT_PREVIEW_LEN);
     return (
       '<form class="api-config-form">' +
       '<label for="api-config-endpoint">API Endpoint</label>' +
       '<input id="api-config-endpoint" name="endpoint" type="text" ' +
       'placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false" ' +
-      'value="' + escapeHtml(endpoint) + '">' +
+      'value="' + escapeHtml(endpointPreview) + '"' +
+      (endpointPreview !== endpoint ? ' data-preview="endpoint"' : '') + '>' +
       '<p class="api-config-hint" hidden></p>' +
       '<label for="api-config-key">API Key</label>' +
       '<input id="api-config-key" name="key" type="password" ' +
@@ -93,6 +106,29 @@
   function mountForm(container) {
     container.innerHTML = formHtml();
 
+    var endpointInput = container.querySelector('#api-config-endpoint');
+    // Long URLs: input renders a begin…end preview until focused; editing keeps the typed text.
+    if (endpointInput) {
+      endpointInput.addEventListener('focus', function () {
+        if (endpointInput.hasAttribute('data-preview')) {
+          endpointInput.value = get('endpoint');
+        }
+        endpointInput.removeAttribute('data-preview');
+      });
+      endpointInput.addEventListener('input', function () {
+        endpointInput.removeAttribute('data-preview');
+      });
+      endpointInput.addEventListener('blur', function () {
+        // Focused-but-untouched: collapse back to the preview on blur.
+        var stored = get('endpoint');
+        if (endpointInput.value === stored) {
+          var preview = middleTruncate(stored, ENDPOINT_PREVIEW_LEN);
+          endpointInput.value = preview;
+          if (preview !== stored) endpointInput.setAttribute('data-preview', 'endpoint');
+        }
+      });
+    }
+
     var clearBtn = container.querySelector('.api-config-clear');
     if (clearBtn) {
       clearBtn.addEventListener('click', function () {
@@ -107,11 +143,14 @@
     var form = container.querySelector('form');
     form.addEventListener('submit', function (event) {
       event.preventDefault();
-      var endpointInput = container.querySelector('#api-config-endpoint');
       var keyInput = container.querySelector('#api-config-key');
       var status = container.querySelector('.api-config-status');
 
-      set('endpoint', endpointInput.value.trim());
+      // Untouched preview input keeps the stored URL; any typed value replaces it.
+      var endpointValue = endpointInput.hasAttribute('data-preview')
+        ? get('endpoint')
+        : endpointInput.value;
+      set('endpoint', endpointValue.trim());
       // Empty key field keeps the existing key; typing replaces it.
       if (keyInput.value) {
         set('key', keyInput.value);
@@ -166,7 +205,7 @@
     var key = get('key');
     if (!endpoint || !key) {
       container.innerHTML =
-        '<p class="api-config-empty">Set your <a href="#/settings">API Endpoint and API Key</a> first — the command needs both.</p>';
+        '<p class="api-config-empty">Set your <a href="#/configuration">API Endpoint and API Key</a> first — the command needs both.</p>';
       return;
     }
     // Displayed command masks the key; the copy button builds the real command from storage.
@@ -301,7 +340,7 @@
     var key = get('key');
     if (!endpoint || !key) {
       container.innerHTML =
-        '<p class="api-config-empty">Set your <a href="#/settings">API Endpoint and API Key</a> first — this needs both.</p>';
+        '<p class="api-config-empty">Set your <a href="#/configuration">API Endpoint and API Key</a> first — this needs both.</p>';
       return true;
     }
     return false;
@@ -568,7 +607,7 @@
     var key = get('key');
     if (!endpoint || !key) {
       container.innerHTML =
-        '<p class="api-config-empty">Set your <a href="#/settings">API Endpoint and API Key</a> first — this needs both.</p>';
+        '<p class="api-config-empty">Set your <a href="#/configuration">API Endpoint and API Key</a> first — this needs both.</p>';
       return;
     }
     container.innerHTML =
@@ -624,7 +663,7 @@
       '<span class="api-settings-sep">·</span>' +
       '<span class="api-settings-label">Key:</span> ' +
       '<span class="api-config" data-field="key"></span>' +
-      '<a class="api-settings-link" href="#/settings">Settings</a>'
+      '<a class="api-settings-link" href="#/configuration">Configuration</a>'
     );
   }
 

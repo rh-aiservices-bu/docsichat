@@ -12,5 +12,5 @@ Click **List models** to run the same request in your browser and display the re
 
 ## Notes
 
-- The URL comes from your [API Endpoint](settings.md) with `/models` appended.
+- The URL comes from your [API Endpoint](configuration.md) with `/models` appended.
 - The displayed command masks the API key after its first 10 characters. **Copy command** places the full command — with the real key — on your clipboard; it is never rendered on the page.
