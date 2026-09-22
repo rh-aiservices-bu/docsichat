@@ -72,6 +72,50 @@
   letter-spacing: 0.15em;
 }
 
+.api-storage-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--warning-color, #b45309);
+  background: var(--warning-bg, #fffbeb);
+  color: var(--warning-text, #92400e);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.api-storage-warning-dismiss {
+  margin-left: auto;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.api-storage-warning-dismiss:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* Load-example button (Basic Chat) */
+.api-example-load {
+  align-self: flex-start;
+  border: 1px dashed var(--border-color);
+  background: transparent;
+  color: var(--theme-color);
+  border-radius: 4px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.api-example-load:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
 /* docsichat: global settings header + API test widgets (Basic Chat, Streaming) */
 
 /* Sticky settings header inside the docsify content column */

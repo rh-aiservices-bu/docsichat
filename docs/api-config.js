@@ -37,6 +37,130 @@
     }
   }
 
+  /* ---------- UI state persistence (session-scoped, per widget) ---------- */
+
+  // sessionStorage so prompts don't outlive the browser session.
+  var UI_KEYS = { chat: 'ui:chat', stream: 'ui:stream' };
+  var MODEL_CACHE_KEY = 'ui:modelCache';
+  var MODEL_CACHE_TTL = 5 * 60 * 1000;
+
+  function sessionGet(key) {
+    try {
+      return sessionStorage.getItem(key);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function sessionSet(key, value) {
+    try {
+      if (value == null) {
+        sessionStorage.removeItem(key);
+      } else {
+        sessionStorage.setItem(key, value);
+      }
+    } catch (e) {
+      /* storage unavailable (private mode etc.) */
+    }
+  }
+
+  function storageAvailable() {
+    // Probe once: setItem throws in private mode / when storage is blocked.
+    try {
+      var probe = '__docsichat_probe__';
+      localStorage.setItem(probe, '1');
+      localStorage.removeItem(probe);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function readUiState(prefix) {
+    var raw = sessionGet(STORAGE_PREFIX + UI_KEYS[prefix]);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveUiState(prefix, state) {
+    sessionSet(STORAGE_PREFIX + UI_KEYS[prefix], JSON.stringify(state));
+  }
+
+  function restoreTestForm(container, prefix) {
+    var saved = readUiState(prefix);
+    if (!saved) return;
+    function apply() {
+      var textareas = container.querySelectorAll('textarea');
+      var system = textareas[0];
+      var prompt = textareas[1];
+      if (system && saved.system) system.value = saved.system;
+      if (prompt && saved.prompt) prompt.value = saved.prompt;
+    }
+    setTimeout(apply, 0);
+  }
+
+  function bindUiStateSave(container, prefix) {
+    function save() {
+      var textareas = container.querySelectorAll('textarea');
+      var model = container.querySelector('select');
+      var state = { system: '', prompt: '', model: '' };
+      if (textareas[0]) state.system = textareas[0].value;
+      if (textareas[1]) state.prompt = textareas[1].value;
+      if (model) state.model = model.value;
+      saveUiState(prefix, state);
+    }
+    var textareas = container.querySelectorAll('textarea');
+    var model = container.querySelector('select');
+    if (textareas[0]) textareas[0].addEventListener('input', save);
+    if (textareas[1]) textareas[1].addEventListener('input', save);
+    if (model) model.addEventListener('change', save);
+  }
+
+  // Restore the saved model once the model list is populated.
+  function restoreTestModel(selectEl, prefix) {
+    var saved = readUiState(prefix);
+    if (!saved || !saved.model) return;
+    for (var i = 0; i < selectEl.options.length; i++) {
+      if (selectEl.options[i].value === saved.model) {
+        selectEl.selectedIndex = i;
+        return;
+      }
+    }
+  }
+
+  /* ---------- Model-list cache (session-scoped, keyed by endpoint) ---------- */
+
+  function modelCacheKey(endpoint) {
+    return normalizeEndpoint(endpoint);
+  }
+
+  function readModelCache(endpoint) {
+    var raw = sessionGet(STORAGE_PREFIX + MODEL_CACHE_KEY);
+    if (!raw) return null;
+    var entry;
+    try {
+      entry = JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+    if (!entry || entry.endpoint !== modelCacheKey(endpoint)) return null;
+    if (typeof entry.at !== 'number' || Date.now() - entry.at > MODEL_CACHE_TTL) return null;
+    if (!Array.isArray(entry.models)) return null;
+    return entry;
+  }
+
+  function writeModelCache(endpoint, models) {
+    sessionSet(STORAGE_PREFIX + MODEL_CACHE_KEY, JSON.stringify({
+      endpoint: modelCacheKey(endpoint),
+      at: Date.now(),
+      models: models
+    }));
+  }
+
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, function (char) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
@@ -106,6 +230,19 @@
 
   function mountForm(container) {
     container.innerHTML = formHtml();
+    if (!storageAvailable()) {
+      // Storage blocked (private mode, etc.): saves are no-ops — warn once, dismissible.
+      var banner = document.createElement('div');
+      banner.className = 'api-storage-warning';
+      banner.setAttribute('role', 'alert');
+      banner.innerHTML =
+        'Saving is unavailable in this browser — settings will not persist. ' +
+        '<button type="button" class="api-storage-warning-dismiss" aria-label="Dismiss">Dismiss</button>';
+      container.insertBefore(banner, container.firstChild);
+      banner.querySelector('.api-storage-warning-dismiss').addEventListener('click', function () {
+        banner.parentNode && banner.parentNode.removeChild(banner);
+      });
+    }
 
     var endpointInput = container.querySelector('#api-config-endpoint');
     // Long URLs: input renders a begin…end preview until focused; editing keeps the typed text.
@@ -298,7 +435,7 @@
     return model.slice(model.lastIndexOf('/') + 1);
   }
 
-  function renderModelRetry(container, selectEl, endpoint, key) {
+  function renderModelRetry(container, selectEl, endpoint, key, prefix) {
     var parent = selectEl.parentNode;
     if (!parent) return;
     var retry = document.createElement('button');
@@ -307,55 +444,52 @@
     retry.textContent = 'Retry';
     parent.insertBefore(retry, selectEl.nextSibling);
     retry.addEventListener('click', function () {
-      listModelsForSelect(endpoint, key, selectEl, null);
+      listModelsForSelect(endpoint, key, selectEl, prefix, null);
     });
   }
 
-  function listModelsForSelect(endpoint, key, selectEl, done) {
-    checkConnection(endpoint, key, function (status) {
+  function listModelsForSelect(endpoint, key, selectEl, prefix, done) {
+    function populate(ids) {
       selectEl.innerHTML = '';
+      // Option value = full model id (RHOAI needs namespace/name for the request);
+      // label = short display name only.
+      selectEl.appendChild(new Option('— select a model —', '', true, true));
+      if (!ids.length) {
+        selectEl.appendChild(new Option('No models returned', '', false, false));
+        selectEl.options[0].disabled = true;
+        selectEl.options[1].disabled = true;
+      } else {
+        selectEl.options[0].disabled = true;
+        Array.prototype.forEach.call(ids, function (id) {
+          selectEl.appendChild(new Option(normalizeModelId(id), id, false, false));
+        });
+      }
+      if (prefix) restoreTestModel(selectEl, prefix);
+    }
+    var cached = readModelCache(endpoint);
+    if (cached) {
+      populate(cached.models);
+      if (done) done();
+      return;
+    }
+    checkConnection(endpoint, key, function (status) {
       if (!status.ok) {
         // The reason is the diagnostic: CORS, 401, typo — surface it verbatim.
+        selectEl.innerHTML = '';
         selectEl.appendChild(new Option('Model list unavailable — ' + status.reason, '', true, true));
         selectEl.options[0].disabled = true;
-        renderModelRetry(selectEl.parentNode, selectEl, endpoint, key);
+        renderModelRetry(selectEl.parentNode, selectEl, endpoint, key, prefix);
       } else {
-        // Option value = full model id (RHOAI needs namespace/name for the request);
-        // label = short display name only.
         var ids = status.models
           .map(function (model) { return model && (model.id || model.name); })
           .filter(Boolean);
-        selectEl.appendChild(new Option('— select a model —', '', true, true));
-        if (!ids.length) {
-          selectEl.appendChild(new Option('No models returned', '', false, false));
-          selectEl.options[0].disabled = true;
-          selectEl.options[1].disabled = true;
-        } else {
-          selectEl.options[0].disabled = true;
-          Array.prototype.forEach.call(ids, function (id) {
-            selectEl.appendChild(new Option(normalizeModelId(id), id, false, false));
-          });
-        }
+        populate(ids);
+        // Failed fetches must never be cached; only a successful list is.
+        writeModelCache(endpoint, ids);
       }
       if (done) done();
     });
   }
-
-  function parseUsage(usage) {
-    usage = usage || {};
-    var prompt = usage.prompt_tokens || usage.input_tokens || 0;
-    var completion = usage.completion_tokens || usage.output_tokens || 0;
-    var parsed = {
-      prompt: prompt,
-      completion: completion,
-      total: usage.total_tokens || prompt + completion,
-      reasoning:
-        (usage.completion_tokens_details && usage.completion_tokens_details.reasoning_tokens) || 0,
-      reasoningTokens: usage.reasoning_tokens || 0
-    };
-    return parsed;
-  }
-
   function reasoningValue(parsed) {
     return parsed.reasoning || parsed.reasoningTokens || 0;
   }
@@ -424,6 +558,29 @@ if (metrics.tokensPerSec != null) {
     };
   }
 
+  // One-click example (Basic Chat): a minimal sanity-check prompt.
+  var EXAMPLE_SYSTEM = 'You are a helpful assistant.';
+  var EXAMPLE_PROMPT = 'Say hello and tell me which model you are.';
+
+  function bindExampleButton(container) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'api-example-load';
+    button.textContent = 'Load example';
+    button.title = 'Fill the form with a sample system + prompt';
+    var wrap = container.querySelector('.api-test-wrap');
+    button.addEventListener('click', function () {
+      var textareas = container.querySelectorAll('textarea');
+      if (textareas[0]) textareas[0].value = EXAMPLE_SYSTEM;
+      if (textareas[1]) textareas[1].value = EXAMPLE_PROMPT;
+      // Reflect the freshly filled fields into session state.
+      var state = readUiState('chat') || { system: '', prompt: '', model: '' };
+      state.system = EXAMPLE_SYSTEM;
+      state.prompt = EXAMPLE_PROMPT;
+      saveUiState('chat', state);
+    });
+  }
+
   function chatRequestBody(fields, stream) {
     var messages = [];
     if (fields.system) {
@@ -477,7 +634,10 @@ if (metrics.tokensPerSec != null) {
       '<div class="api-test-wrap">' + testFormHtml('api-test') + '</div>' +
       '<div class="api-test-result"></div>';
     var selectEl = container.querySelector('#api-test-model');
-    listModelsForSelect(get('endpoint'), get('key'), selectEl, null);
+    listModelsForSelect(get('endpoint'), get('key'), selectEl, 'chat', null);
+    restoreTestForm(container, 'chat');
+    bindUiStateSave(container, 'chat');
+    bindExampleButton(container);
     var form = container.querySelector('form');
     form.addEventListener('submit', function (event) {
       event.preventDefault();
@@ -532,7 +692,9 @@ if (metrics.tokensPerSec != null) {
     var form = container.querySelector('form');
     var selectEl = container.querySelector('#api-stream-model');
     var runButton = form.querySelector('button[type="submit"]');
-    listModelsForSelect(get('endpoint'), get('key'), selectEl, null);
+    listModelsForSelect(get('endpoint'), get('key'), selectEl, 'stream', null);
+    restoreTestForm(container, 'stream');
+    bindUiStateSave(container, 'stream');
     var stopButton = document.createElement('button');
     stopButton.type = 'button';
     stopButton.textContent = 'Stop';
