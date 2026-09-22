@@ -52,9 +52,10 @@ stale within a day once already). File references: the settings page is now
 21. **Manual dark-mode toggle — DONE 2026-09-22.** Cycle OS → light → dark, persisted under `docsichat:api:ui:theme`, ES5, aria-label/title per state. Committed b51593c.
 22. **404 page — DONE 2026-09-22.** `notFoundPage: true` (verified key against docsify v5) + `docs/_404.md` with home link. Committed b51593c.
 23. **Content-Security-Policy meta — DONE 2026-09-22.** Added with Google Fonts additions the first draft missed (style-src/font-src); verified zero console errors + all features working under CSP. Committed b51593c.
-27. **Dev-server cache fix — DONE 2026-09-22.** scripts/serve.py sends Cache-Control: no-store on every response (GET/HEAD/404); do_HEAD resolves directories to index.html. Replaces the plain http.server workflow. Committed ca7a8eb.
-28. **Smoke-check script — DONE 2026-09-22.** scripts/smoke-check.js: standalone CDP smoke check (widgets mount, storage round-trip, key never unmasked, console errors), clean SKIP when no CDP endpoint. Known limitation: Chrome 153 on the dev machine closes the DevTools WebSocket after the first command (reproduced at byte level) — the script's checks are verified on any Chrome with a working DevTools ws. Committed ca7a8eb.
-29. **Sidebar grouping.** In progress — PluginP3 agent.
+24. **Accessibility pass — DONE 2026-09-22.** aria-live='polite' + role='status' on the live stream panel, aria-label on Stop, shared :focus-visible outline rule for all custom buttons; no focus stealing. Committed d0e45f8.
+25. **Key-preview entropy note — DONE 2026-09-22.** PREVIEW_LEN 10→6; JWT keys render 'eyJ…' + mask; configuration.md prose matches. Committed d0e45f8.
+26. **Token estimate before send — DONE 2026-09-22.** Live '~N tokens est.' hint (chars/4) under the prompt textarea in both test forms. Committed d0e45f8.
+29. **Sidebar grouping — DONE 2026-09-22.** Configuration / Playground sections, all pages reachable. Committed d0e45f8.
 
 
 ## Parked — beyond the tutorial core
