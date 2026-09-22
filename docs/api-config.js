@@ -364,11 +364,12 @@
     return !usage || (!usage.prompt && !usage.completion && !usage.total);
   }
 
-  function metricsFromTimes(tStart, tFirst, tEnd, outputTokens) {
+function metricsFromTimes(tStart, tFirst, tEnd, outputTokens, tokPerSecOverride) {
     var latencyMs = Math.round(tEnd - tStart);
     var ttftMs = tFirst ? Math.round(tFirst - tStart) : null;
     var genMs = tEnd - (tFirst || tStart);
     var tokensPerSec = genMs > 0 ? (outputTokens * 1000) / genMs : null;
+    if (tokPerSecOverride != null) tokensPerSec = tokPerSecOverride;
     return { latencyMs: latencyMs, ttftMs: ttftMs, tokensPerSec: tokensPerSec };
   }
 
@@ -382,8 +383,9 @@
     if (metrics.ttftMs != null) {
       rows += '<dt>Time to first token</dt><dd>' + metrics.ttftMs + ' ms</dd>';
     }
-    if (metrics.tokensPerSec != null) {
-      rows += '<dt>Output tokens/sec</dt><dd>' + metrics.tokensPerSec.toFixed(1) + ' tok/s</dd>';
+if (metrics.tokensPerSec != null) {
+      var tpsSuffix = usage.usageMissing && usage.tokensPerSecEstimate != null ? ' est.' : '';
+      rows += '<dt>Output tokens/sec</dt><dd>' + metrics.tokensPerSec.toFixed(1) + ' tok/s' + tpsSuffix + '</dd>';
     }
     return '<dl class="api-test-metrics">' + rows + '</dl>';
   }
@@ -525,60 +527,61 @@
   function mountStream(container) {
     if (guardOrEmpty(container)) return;
     container.innerHTML =
-      '<div class="api-test-wrap">' +
-      testFormHtml(
-        'api-stream',
-        '<label for="api-stream-view">View</label>' +
-          '<span class="api-test-view">' +
-          '<label><input type="radio" name="api-stream-view" value="rendered" checked> Rendered</label>' +
-          '<label><input type="radio" name="api-stream-view" value="raw"> Raw</label>' +
-          '</span>'
-      ) +
-      '</div>' +
+      '<div class="api-test-wrap">' + testFormHtml('api-stream', '') + '</div>' +
       '<div class="api-test-result"></div>';
-    var selectEl = container.querySelector('#api-stream-model');
-    listModelsForSelect(get('endpoint'), get('key'), selectEl, null);
     var form = container.querySelector('form');
+    var selectEl = container.querySelector('#api-stream-model');
+    var runButton = form.querySelector('button[type="submit"]');
+    listModelsForSelect(get('endpoint'), get('key'), selectEl, null);
+    var stopButton = document.createElement('button');
+    stopButton.type = 'button';
+    stopButton.textContent = 'Stop';
+    stopButton.disabled = true;
+    stopButton.title = 'Stop the stream in progress';
+    runButton.insertAdjacentElement('afterend', stopButton);
+    var streamController = null;
     form.addEventListener('submit', function (event) {
       event.preventDefault();
+      if (streamController) return;
       var status = container.querySelector('.api-config-status');
       var result = container.querySelector('.api-test-result');
       var fields = readTestForm(container, 'api-stream');
       if (!fields.prompt) { status.textContent = 'Enter a prompt.'; return; }
       var body = chatRequestBody(fields, true);
-      var viewRadios = container.querySelectorAll('input[name="api-stream-view"]');
       var renderedPanel = document.createElement('pre');
       renderedPanel.className = 'api-test-response api-test-live';
-      var rawPanel = document.createElement('pre');
-      rawPanel.className = 'api-test-raw';
       renderedPanel.textContent = '';
-      rawPanel.textContent = '';
       result.innerHTML = '';
       result.appendChild(renderedPanel);
-      result.appendChild(rawPanel);
-      var checkedView = container.querySelector('input[name="api-stream-view"]:checked');
-      var currentView = checkedView ? checkedView.value : 'rendered';
-      Array.prototype.forEach.call(viewRadios, function (radio) {
-        radio.addEventListener('change', function () {
-          currentView = radio.value;
-          renderedPanel.hidden = currentView !== 'rendered';
-          rawPanel.hidden = currentView !== 'raw';
-        });
-      });
-      renderedPanel.hidden = currentView !== 'rendered';
-      rawPanel.hidden = currentView !== 'raw';
       status.textContent = 'Streaming…';
+      runButton.disabled = true;
+      stopButton.disabled = false;
+      streamController = new AbortController();
+      var aborted = false;
       var tStart = performance.now();
       var tFirst = null;
       var renderedText = '';
-      var rawLines = [];
+      var contentDeltas = 0;
       var finalUsage = null;
+      var rawRing = [];
+      var RAW_RING_SIZE = 20;
+      function pushRaw(line) {
+        rawRing.push(line);
+        if (rawRing.length > RAW_RING_SIZE) rawRing.shift();
+      }
+      function debugRaw(reason) {
+        try {
+          console.debug('[docsichat] last ' + rawRing.length + ' raw SSE events (' + reason + '):', rawRing.slice());
+        } catch (e) { /* console.debug unavailable; nothing else to do */ }
+      }
       // CORS is required for this call to work at all: the endpoint must send
       // Access-Control-Allow-Origin for this origin plus Access-Control-Allow-Headers
       // "Authorization, Content-Type", or fetch rejects (TypeError) before any body.
       // The Basic Chat page has the same requirement; fetch errors surface through
       // formatModelError so the user sees a clear network/CORS message.
-      fetch(chatCompletionUrl(get('endpoint')), chatRequestOptions(get('key'), body))
+      var requestOptions = chatRequestOptions(get('key'), body);
+      requestOptions.signal = streamController.signal;
+      fetch(chatCompletionUrl(get('endpoint')), requestOptions)
         .then(function (response) {
           if (!response.ok) {
             return response.text().then(function (text) {
@@ -593,8 +596,7 @@
             var lines = eventText.split('\n');
             Array.prototype.forEach.call(lines, function (line) {
               if (line.slice(0, 5) !== 'data:') return;
-              rawLines.push(line.replace(/\r$/, ''));
-              rawPanel.textContent = rawLines.join('\n');
+              pushRaw(line.replace(/\r$/, ''));
               var payloadText = line.slice(5).replace(/\r$/, '');
               if (payloadText.charAt(0) === ' ') payloadText = payloadText.slice(1);
               if (payloadText === '[DONE]') {
@@ -610,6 +612,7 @@
                   : null;
               if (deltaContent) {
                 if (tFirst === null) tFirst = performance.now();
+                contentDeltas += 1;
                 renderedText += deltaContent;
                 renderedPanel.textContent = renderedText;
               }
@@ -635,9 +638,18 @@
           var tEnd = performance.now();
           var parsedUsage = parseUsage(finalUsage);
           parsedUsage.usageMissing = noUsage(parsedUsage);
+          if (parsedUsage.usageMissing && tFirst !== null && contentDeltas > 0) {
+            // No usage chunk arrived (stream cut short or server omits it):
+            // estimate throughput from received content deltas instead of
+            // rendering a misleading 0.0 tok/s.
+            var estTok = Math.max(1, Math.round(renderedText.length / 4));
+            var genMs = tEnd - tFirst;
+            parsedUsage.tokensPerSecEstimate =
+              genMs > 0 ? (estTok * 1000) / genMs : null;
+          }
           var metricsDiv = document.createElement('div');
           metricsDiv.innerHTML = metricsHtml(
-            metricsFromTimes(tStart, tFirst, tEnd, parsedUsage.completion),
+            metricsFromTimes(tStart, tFirst, tEnd, parsedUsage.usageMissing ? 0 : parsedUsage.completion, parsedUsage.tokensPerSecEstimate),
             parsedUsage
           );
           result.appendChild(metricsDiv);
@@ -645,12 +657,25 @@
         })
         .catch(function (error) {
           if (error && error.isHttpError) {
+            debugRaw('HTTP error');
             renderTestError(container, error.response, error.text);
+          } else if (error && error.name === 'AbortError') {
+            aborted = true;
+            status.textContent = 'Stopped.';
           } else {
+            debugRaw('stream failed: ' + (error && error.message ? error.message : String(error)));
             renderFetchError(container, error);
           }
-          status.textContent = '';
+          if (!aborted) status.textContent = '';
+        })
+        .then(function () {
+          streamController = null;
+          runButton.disabled = false;
+          stopButton.disabled = true;
         });
+    });
+    stopButton.addEventListener('click', function () {
+      if (streamController) streamController.abort();
     });
   }
 
