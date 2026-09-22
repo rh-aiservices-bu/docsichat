@@ -33,16 +33,16 @@ stale within a day once already). File references: the settings page is now
 6. **Docs accuracy quick fixes — DONE 2026-09-22.** README port 3000→3010; `configuration.md` mentions the Clear button. Committed b51593c. The curl.md CORS section (P1 item 0 doc half) landed in the same commit.
 
 ## P2 — iterate & demo (serving perf)
-7. **Remember UI state per widget.** Queued — next link of the serial plugin chain (StateCache) after StreamWidget lands.
-8. **Cache the model list.** Queued — same chain link (StateCache).
-9. **Abort/stop for streaming.** In progress — StreamWidget agent.
-10. **tok/s fallback when usage is missing.** In progress — StreamWidget agent.
-11. **One-click example prompt.** Queued — candidate for the StateCache or PluginP3 chain link.
-12. **Side-by-side model comparison.** Not started — larger feature; schedule after the serial chain drains.
-13. **Session request history.** Not started — after the chain.
-14. **Streaming render perf.** Queued — candidate for PluginP3 chain link.
-15. **"Interpreting your metrics" note.** In progress — StreamWidget agent (streaming.md prose).
-16. **Storage-failure warning.** Queued — StateCache chain link.
+7. **Remember UI state per widget — DONE 2026-09-22.** Per-widget state under sessionStorage `docsichat:api:ui:chat`/`ui:stream`, restored on mount. Committed bf5450d.
+8. **Cache the model list — DONE 2026-09-22.** sessionStorage cache keyed by normalized endpoint, 5-min TTL, failed fetches never cached. Committed bf5450d.
+9. **Abort/stop for streaming — DONE 2026-09-22.** AbortController + Stop button, Run disabled while streaming, abort shows 'Stopped.' not an error. Committed 4536033.
+10. **tok/s fallback when usage is missing — DONE 2026-09-22.** Estimates from content-delta count, labeled 'est.'; 0.0 tok/s impossible. Committed 4536033.
+11. **One-click example prompt — DONE 2026-09-22.** Load example button on Basic Chat fills system+prompt without submitting. Committed bf5450d.
+12. **Side-by-side model comparison.** Not started — larger feature.
+13. **Session request history.** Not started.
+14. **Streaming render perf.** Not started.
+15. **"Interpreting your metrics" note — DONE 2026-09-22.** Ballparks in docs/streaming.md (TTFT ~200ms-2s, 10-50+ tok/s GPU-typical). Committed 4536033.
+16. **Storage-failure warning — DONE 2026-09-22.** storageAvailable() probe + dismissible banner on Configuration. Committed bf5450d.
 ## P3 — lower fit / hardening
 
 17. **Model metadata.** Show `owned_by`/`created` from `/models` next to names. Demoted — near-zero participant value.
@@ -52,12 +52,10 @@ stale within a day once already). File references: the settings page is now
 21. **Manual dark-mode toggle — DONE 2026-09-22.** Cycle OS → light → dark, persisted under `docsichat:api:ui:theme`, ES5, aria-label/title per state. Committed b51593c.
 22. **404 page — DONE 2026-09-22.** `notFoundPage: true` (verified key against docsify v5) + `docs/_404.md` with home link. Committed b51593c.
 23. **Content-Security-Policy meta — DONE 2026-09-22.** Added with Google Fonts additions the first draft missed (style-src/font-src); verified zero console errors + all features working under CSP. Committed b51593c.
-24. **Accessibility pass.** Focus management after widget mount, `aria-live` on streamed output, visible focus states on custom buttons.
-25. **Key-preview entropy note.** `PREVIEW_LEN = 10` feeds the Settings table, form placeholder, and the persistent header on every page. JWT-shaped tokens (constant `eyJ…` prefix) leak nothing, but 10 chars of a short opaque secret is shoulder-surfable in a workshop room. Shorten to 4–6 chars or detect the `eyJ` prefix, and say in `configuration.md` what the preview reveals.
-26. **Token estimate before send.** Rough chars/4 hint in the test forms.
-27. **Dev-server cache fix.** In progress — Tooling agent (scripts/serve.py).
-28. **Smoke-check script.** In progress — Tooling agent (scripts/smoke-check.js).
-29. **Sidebar grouping.** Flat list today; group into Configuration / Playground as pages grow.
+27. **Dev-server cache fix — DONE 2026-09-22.** scripts/serve.py sends Cache-Control: no-store on every response (GET/HEAD/404); do_HEAD resolves directories to index.html. Replaces the plain http.server workflow. Committed ca7a8eb.
+28. **Smoke-check script — DONE 2026-09-22.** scripts/smoke-check.js: standalone CDP smoke check (widgets mount, storage round-trip, key never unmasked, console errors), clean SKIP when no CDP endpoint. Known limitation: Chrome 153 on the dev machine closes the DevTools WebSocket after the first command (reproduced at byte level) — the script's checks are verified on any Chrome with a working DevTools ws. Committed ca7a8eb.
+29. **Sidebar grouping.** In progress — PluginP3 agent.
+
 
 ## Parked — beyond the tutorial core
 
