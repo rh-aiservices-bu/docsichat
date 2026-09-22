@@ -6,7 +6,7 @@
  * - Any docs page can render saved values with:
  *     <span class="api-config" data-field="endpoint"></span>
  *     <span class="api-config" data-field="key"></span>
- *   The API key renders with its first 10 characters followed by a mask; the full key is never shown.
+ *   The API key renders with its first 6 characters (or 'eyJ…' for JWT-shaped keys) followed by a mask; the full key is never shown.
  */
 (function () {
   'use strict';
@@ -14,7 +14,7 @@
   var STORAGE_PREFIX = 'docsichat:api:';
   var FIELDS = ['endpoint', 'key'];
   var MASK = '••••••••';
-  var PREVIEW_LEN = 10;
+  var PREVIEW_LEN = 6;
   var ENDPOINT_PREVIEW_LEN = 44;
 
   function get(field) {
@@ -168,10 +168,15 @@
   }
 
   function previewKey(value) {
-    // Short keys reveal nothing; longer keys show only the first PREVIEW_LEN chars.
-    return value.length > PREVIEW_LEN
-      ? escapeHtml(value.slice(0, PREVIEW_LEN)) + MASK
-      : MASK;
+    // JWT-shaped tokens start with the constant base64 header 'eyJ'; showing it
+    // leaks nothing, so render 'eyJ…' + mask instead of a longer prefix.
+    if (value.length > PREVIEW_LEN) {
+      var prefix = value.slice(0, PREVIEW_LEN);
+      return (value.charAt(0) === 'e' && value.charAt(1) === 'y' && value.charAt(2) === 'J'
+        ? 'eyJ…'
+        : escapeHtml(prefix)) + MASK;
+    }
+    return MASK;
   }
 
   function middleTruncate(value, max) {
@@ -298,7 +303,8 @@
       mountForm(container);
       refreshPlaceholders(document);
       container.querySelector('.api-config-status').textContent =
-        'Saved locally. Only the first 10 characters of the API key are ever displayed.';
+        'Saved locally. The key preview shows the first 6 characters (or ' +
+        'eyJ… for JWT-shaped keys) followed by a mask.';
     });
 
     var testBtn = container.querySelector('.api-config-test');
@@ -541,6 +547,7 @@ if (metrics.tokensPerSec != null) {
       '<textarea id="' + prefix + '-system" rows="2" placeholder="optional"></textarea>' +
       '<label for="' + prefix + '-prompt">Prompt</label>' +
       '<textarea id="' + prefix + '-prompt" rows="3"></textarea>' +
+      '<span class="api-token-estimate" id="' + prefix + '-token-estimate" aria-live="polite"></span>' +
       '<label for="' + prefix + '-model">Model</label>' +
       '<select id="' + prefix + '-model"></select>' +
       (extraControls || '') +
@@ -548,6 +555,19 @@ if (metrics.tokensPerSec != null) {
       '<p class="api-config-status" role="status"></p>' +
       '</form>'
     );
+  }
+
+  // Rough chars/4 estimate shown near the prompt textarea; updates on input.
+  function bindTokenEstimate(container, prefix) {
+    var prompt = container.querySelector('#' + prefix + '-prompt');
+    var hint = container.querySelector('#' + prefix + '-token-estimate');
+    if (!prompt || !hint) return;
+    function update() {
+      var len = prompt.value.length;
+      hint.textContent = len ? '~' + Math.ceil(len / 4) + ' tokens est.' : '';
+    }
+    prompt.addEventListener('input', update);
+    update();
   }
 
   function readTestForm(container, prefix) {
@@ -637,6 +657,7 @@ if (metrics.tokensPerSec != null) {
     listModelsForSelect(get('endpoint'), get('key'), selectEl, 'chat', null);
     restoreTestForm(container, 'chat');
     bindUiStateSave(container, 'chat');
+    bindTokenEstimate(container, 'api-test');
     bindExampleButton(container);
     var form = container.querySelector('form');
     form.addEventListener('submit', function (event) {
@@ -695,11 +716,13 @@ if (metrics.tokensPerSec != null) {
     listModelsForSelect(get('endpoint'), get('key'), selectEl, 'stream', null);
     restoreTestForm(container, 'stream');
     bindUiStateSave(container, 'stream');
+    bindTokenEstimate(container, 'api-stream');
     var stopButton = document.createElement('button');
     stopButton.type = 'button';
     stopButton.textContent = 'Stop';
     stopButton.disabled = true;
     stopButton.title = 'Stop the stream in progress';
+    stopButton.setAttribute('aria-label', 'Stop the stream in progress');
     runButton.insertAdjacentElement('afterend', stopButton);
     var streamController = null;
     form.addEventListener('submit', function (event) {
@@ -712,6 +735,8 @@ if (metrics.tokensPerSec != null) {
       var body = chatRequestBody(fields, true);
       var renderedPanel = document.createElement('pre');
       renderedPanel.className = 'api-test-response api-test-live';
+      renderedPanel.setAttribute('aria-live', 'polite');
+      renderedPanel.setAttribute('role', 'status');
       renderedPanel.textContent = '';
       result.innerHTML = '';
       result.appendChild(renderedPanel);

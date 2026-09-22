@@ -195,6 +195,26 @@
   filter: brightness(0.94);
 }
 
+/* Visible keyboard focus for custom buttons (docsify core clears it) */
+.api-curl-copy:focus-visible,
+.api-models-run:focus-visible,
+.api-example-load:focus-visible,
+.api-config-clear:focus-visible,
+.api-storage-warning-dismiss:focus-visible,
+.api-test-form button[type='submit']:focus-visible,
+.api-test-form button.api-models-retry:focus-visible {
+  outline: 3px solid var(--theme-color-3, #0066cc);
+  outline-offset: 2px;
+}
+
+/* Token-estimate hint below the prompt textarea */
+.api-token-estimate {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-mono-6);
+  min-height: 1em;
+}
+
 .api-test-view {
   display: inline-flex;
   gap: 1rem;
