@@ -69,17 +69,22 @@
   function formHtml() {
     var endpoint = get('endpoint');
     var hasKey = Boolean(get('key'));
+    var hasAny = Boolean(endpoint) || hasKey;
     return (
       '<form class="api-config-form">' +
       '<label for="api-config-endpoint">API Endpoint</label>' +
       '<input id="api-config-endpoint" name="endpoint" type="text" ' +
       'placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false" ' +
       'value="' + escapeHtml(endpoint) + '">' +
+      '<p class="api-config-hint" hidden></p>' +
       '<label for="api-config-key">API Key</label>' +
       '<input id="api-config-key" name="key" type="password" ' +
       'autocomplete="new-password" spellcheck="false" placeholder="' +
       (hasKey ? previewKey(get('key')) + ' (saved — type to replace)' : 'paste your API key') + '">' +
+      '<div class="api-config-actions">' +
       '<button type="submit">Save</button>' +
+      (hasAny ? '<button type="button" class="api-config-clear">Clear</button>' : '') +
+      '</div>' +
       '<p class="api-config-status" role="status"></p>' +
       '</form>'
     );
@@ -87,6 +92,17 @@
 
   function mountForm(container) {
     container.innerHTML = formHtml();
+
+    var clearBtn = container.querySelector('.api-config-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        set('key', '');
+        set('endpoint', '');
+        mountForm(container);
+        refreshPlaceholders(document);
+        container.querySelector('.api-config-status').textContent = 'Saved values cleared.';
+      });
+    }
 
     var form = container.querySelector('form');
     form.addEventListener('submit', function (event) {
@@ -107,6 +123,13 @@
       refreshPlaceholders(document);
       container.querySelector('.api-config-status').textContent =
         'Saved locally. Only the first 10 characters of the API key are ever displayed.';
+      // Unobtrusive reminder: OpenAI-compatible base URLs usually end in /v1.
+      var savedEndpoint = get('endpoint');
+      var hint = container.querySelector('.api-config-hint');
+      if (hint && savedEndpoint && !/\/v\d+(\/)?$/.test(savedEndpoint)) {
+        hint.textContent = 'Hint: OpenAI-compatible API URLs usually end in /v1 (e.g. https://api.example.com/v1).';
+        hint.hidden = false;
+      }
     });
   }
 
@@ -178,6 +201,368 @@
     return null;
   }
 
+  function chatCompletionUrl(endpoint) {
+    return endpoint.replace(/\/+$/, '') + '/chat/completions';
+  }
+
+  function normalizeModelId(model) {
+    if (typeof model !== 'string' || model.indexOf('/') === -1) return model;
+    return model.slice(model.lastIndexOf('/') + 1);
+  }
+
+  function listModelsForSelect(endpoint, key, selectEl, done) {
+    fetch(modelsUrl(endpoint), { headers: { Authorization: 'Bearer ' + key } })
+      .then(function (response) {
+        return response.text().then(function (text) {
+          if (!response.ok) {
+            throw new Error('HTTP ' + response.status + ' ' + response.statusText + (text ? ' — ' + text.slice(0, 200) : ''));
+          }
+          var payload;
+          try { payload = JSON.parse(text); } catch (e) { throw new Error('Non-JSON response: ' + text.slice(0, 200)); }
+          return payload;
+        });
+      })
+      .then(function (payload) {
+        var models = extractModels(payload);
+        var names = (models || [])
+          .map(function (model) { return model && (model.id || model.name); })
+          .filter(Boolean)
+          .map(normalizeModelId);
+        selectEl.innerHTML = '';
+        selectEl.appendChild(new Option('— select a model —', '', true, true));
+        if (!names.length) {
+          selectEl.appendChild(new Option('No models returned', '', false, false));
+          selectEl.options[0].disabled = true;
+          selectEl.options[1].disabled = true;
+        } else {
+          selectEl.options[0].disabled = true;
+          Array.prototype.forEach.call(names, function (name) {
+            selectEl.appendChild(new Option(name, name, false, false));
+          });
+          selectEl.options[0].disabled = true;
+        }
+      })
+      .catch(function (error) {
+        selectEl.innerHTML = '';
+        selectEl.appendChild(new Option('Model list unavailable', '', true, true));
+        selectEl.options[0].disabled = true;
+      })
+      .then(function () { if (done) done(); });
+  }
+
+  function parseUsage(usage) {
+    usage = usage || {};
+    var prompt = usage.prompt_tokens || usage.input_tokens || 0;
+    var completion = usage.completion_tokens || usage.output_tokens || 0;
+    var parsed = {
+      prompt: prompt,
+      completion: completion,
+      total: usage.total_tokens || prompt + completion,
+      reasoning:
+        (usage.completion_tokens_details && usage.completion_tokens_details.reasoning_tokens) || 0,
+      reasoningTokens: usage.reasoning_tokens || 0
+    };
+    return parsed;
+  }
+
+  function reasoningValue(parsed) {
+    return parsed.reasoning || parsed.reasoningTokens || 0;
+  }
+
+  function noUsage(usage) {
+    return !usage || (!usage.prompt && !usage.completion && !usage.total);
+  }
+
+  function metricsFromTimes(tStart, tFirst, tEnd, outputTokens) {
+    var latencyMs = Math.round(tEnd - tStart);
+    var ttftMs = tFirst ? Math.round(tFirst - tStart) : null;
+    var genMs = tEnd - (tFirst || tStart);
+    var tokensPerSec = genMs > 0 ? (outputTokens * 1000) / genMs : null;
+    return { latencyMs: latencyMs, ttftMs: ttftMs, tokensPerSec: tokensPerSec };
+  }
+
+  function metricsHtml(metrics, usage) {
+    var rows =
+      '<dt>Input tokens</dt><dd>' + usage.prompt + '</dd>' +
+      '<dt>Output tokens</dt><dd>' + usage.completion + (usage.usageMissing ? ' (no usage in stream)' : '') + '</dd>' +
+      '<dt>Total tokens</dt><dd>' + usage.total + '</dd>' +
+      '<dt>Reasoning tokens</dt><dd>' + reasoningValue(usage) + '</dd>' +
+      '<dt>Total latency</dt><dd>' + metrics.latencyMs + ' ms</dd>';
+    if (metrics.ttftMs != null) {
+      rows += '<dt>Time to first token</dt><dd>' + metrics.ttftMs + ' ms</dd>';
+    }
+    if (metrics.tokensPerSec != null) {
+      rows += '<dt>Output tokens/sec</dt><dd>' + metrics.tokensPerSec.toFixed(1) + ' tok/s</dd>';
+    }
+    return '<dl class="api-test-metrics">' + rows + '</dl>';
+  }
+  function guardOrEmpty(container) {
+    var endpoint = get('endpoint');
+    var key = get('key');
+    if (!endpoint || !key) {
+      container.innerHTML =
+        '<p class="api-config-empty">Set your <a href="#/settings">API Endpoint and API Key</a> first — this needs both.</p>';
+      return true;
+    }
+    return false;
+  }
+
+  function testFormHtml(prefix, extraControls) {
+    return (
+      '<form class="api-test-form">' +
+      '<label for="' + prefix + '-system">System prompt</label>' +
+      '<textarea id="' + prefix + '-system" rows="2" placeholder="optional"></textarea>' +
+      '<label for="' + prefix + '-prompt">Prompt</label>' +
+      '<textarea id="' + prefix + '-prompt" rows="3"></textarea>' +
+      '<label for="' + prefix + '-model">Model</label>' +
+      '<select id="' + prefix + '-model"></select>' +
+      (extraControls || '') +
+      '<button type="submit">Run</button>' +
+      '<p class="api-config-status" role="status"></p>' +
+      '</form>'
+    );
+  }
+
+  function readTestForm(container, prefix) {
+    return {
+      system: container.querySelector('#' + prefix + '-system').value,
+      prompt: container.querySelector('#' + prefix + '-prompt').value,
+      model: container.querySelector('#' + prefix + '-model').value
+    };
+  }
+
+  function chatRequestBody(fields, stream) {
+    var messages = [];
+    if (fields.system) {
+      messages.push({ role: 'system', content: fields.system });
+    }
+    messages.push({ role: 'user', content: fields.prompt });
+    var body = { messages: messages, stream: stream };
+    if (stream) {
+      body.stream_options = { include_usage: true };
+    }
+    if (fields.model) {
+       body.model = fields.model;
+    }
+    return body;
+  }
+
+  function chatRequestOptions(key, body) {
+    return {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+      body: JSON.stringify(body)
+    };
+  }
+
+  function renderTestError(container, response, text) {
+    // Keep the result div in the DOM: the mounts re-query it per submit, and
+    // removing it makes the next submit throw on a null result.
+    var result = container.querySelector('.api-test-result');
+    if (!result) {
+      result = document.createElement('div');
+      result.className = 'api-test-result';
+      container.appendChild(result);
+    }
+    result.innerHTML =
+      '<p class="api-config-empty">Request failed: HTTP ' + response.status + ' ' + escapeHtml(response.statusText) +
+      (text ? ' — ' + escapeHtml(text.slice(0, 400)) : '') + '</p>';
+  }
+  function renderFetchError(container, error) {
+    var result = container.querySelector('.api-test-result');
+    if (!result) {
+      result = document.createElement('div');
+      result.className = 'api-test-result';
+      container.appendChild(result);
+    }
+    result.innerHTML = formatModelError(error);
+  }
+
+  function mountChat(container) {
+    if (guardOrEmpty(container)) return;
+    container.innerHTML =
+      '<div class="api-test-wrap">' + testFormHtml('api-test') + '</div>' +
+      '<div class="api-test-result"></div>';
+    var selectEl = container.querySelector('#api-test-model');
+    listModelsForSelect(get('endpoint'), get('key'), selectEl, null);
+    var form = container.querySelector('form');
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var status = container.querySelector('.api-config-status');
+      var result = container.querySelector('.api-test-result');
+      var fields = readTestForm(container, 'api-test');
+      if (!fields.prompt) {
+        status.textContent = 'Enter a prompt.';
+        return;
+      }
+      status.textContent = 'Running…';
+      var tStart = performance.now();
+      var tEnd = null;
+      fetch(chatCompletionUrl(get('endpoint')), chatRequestOptions(get('key'), chatRequestBody(fields, false)))
+        .then(function (response) {
+          tEnd = performance.now();
+          return response.text().then(function (text) {
+            if (!response.ok) {
+              throw { isHttpError: true, response: response, text: text };
+            }
+            return { payload: JSON.parse(text), text: text };
+          });
+        })
+        .then(function (parsed) {
+          var payload = parsed.payload;
+          var content = '';
+          if (payload && payload.choices && payload.choices[0] && payload.choices[0].message) {
+            content = payload.choices[0].message.content || '';
+          }
+          var usage = parseUsage(payload && payload.usage);
+          result.innerHTML =
+            '<h3>Response</h3>' +
+            '<pre class="api-test-response">' + escapeHtml(content) + '</pre>' +
+            metricsHtml({ latencyMs: Math.round(tEnd - tStart), ttftMs: null, tokensPerSec: null }, usage);
+        })
+        .catch(function (error) {
+          if (error && error.isHttpError) {
+            renderTestError(container, error.response, error.text);
+          } else {
+            renderFetchError(container, error);
+          }
+          status.textContent = '';
+        });
+    });
+  }
+
+  function mountStream(container) {
+    if (guardOrEmpty(container)) return;
+    container.innerHTML =
+      '<div class="api-test-wrap">' +
+      testFormHtml(
+        'api-stream',
+        '<label for="api-stream-view">View</label>' +
+          '<span class="api-test-view">' +
+          '<label><input type="radio" name="api-stream-view" value="rendered" checked> Rendered</label>' +
+          '<label><input type="radio" name="api-stream-view" value="raw"> Raw</label>' +
+          '</span>'
+      ) +
+      '</div>' +
+      '<div class="api-test-result"></div>';
+    var selectEl = container.querySelector('#api-stream-model');
+    listModelsForSelect(get('endpoint'), get('key'), selectEl, null);
+    var form = container.querySelector('form');
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var status = container.querySelector('.api-config-status');
+      var result = container.querySelector('.api-test-result');
+      var fields = readTestForm(container, 'api-stream');
+      if (!fields.prompt) { status.textContent = 'Enter a prompt.'; return; }
+      var body = chatRequestBody(fields, true);
+      var viewRadios = container.querySelectorAll('input[name="api-stream-view"]');
+      var renderedPanel = document.createElement('pre');
+      renderedPanel.className = 'api-test-response api-test-live';
+      var rawPanel = document.createElement('pre');
+      rawPanel.className = 'api-test-raw';
+      renderedPanel.textContent = '';
+      rawPanel.textContent = '';
+      result.innerHTML = '';
+      result.appendChild(renderedPanel);
+      result.appendChild(rawPanel);
+      var checkedView = container.querySelector('input[name="api-stream-view"]:checked');
+      var currentView = checkedView ? checkedView.value : 'rendered';
+      Array.prototype.forEach.call(viewRadios, function (radio) {
+        radio.addEventListener('change', function () {
+          currentView = radio.value;
+          renderedPanel.hidden = currentView !== 'rendered';
+          rawPanel.hidden = currentView !== 'raw';
+        });
+      });
+      renderedPanel.hidden = currentView !== 'rendered';
+      rawPanel.hidden = currentView !== 'raw';
+      status.textContent = 'Streaming…';
+      var tStart = performance.now();
+      var tFirst = null;
+      var renderedText = '';
+      var rawLines = [];
+      var finalUsage = null;
+      // CORS is required for this call to work at all: the endpoint must send
+      // Access-Control-Allow-Origin for this origin plus Access-Control-Allow-Headers
+      // "Authorization, Content-Type", or fetch rejects (TypeError) before any body.
+      // The Basic Chat page has the same requirement; fetch errors surface through
+      // formatModelError so the user sees a clear network/CORS message.
+      fetch(chatCompletionUrl(get('endpoint')), chatRequestOptions(get('key'), body))
+        .then(function (response) {
+          if (!response.ok) {
+            return response.text().then(function (text) {
+              throw { isHttpError: true, response: response, text: text };
+            });
+          }
+          var reader = response.body.getReader();
+          var decoder = new TextDecoder();
+          var buffer = '';
+          var sawDone = false;
+          function processEvent(eventText) {
+            var lines = eventText.split('\n');
+            Array.prototype.forEach.call(lines, function (line) {
+              if (line.slice(0, 5) !== 'data:') return;
+              rawLines.push(line.replace(/\r$/, ''));
+              rawPanel.textContent = rawLines.join('\n');
+              var payloadText = line.slice(5).replace(/\r$/, '');
+              if (payloadText.charAt(0) === ' ') payloadText = payloadText.slice(1);
+              if (payloadText === '[DONE]') {
+                sawDone = true;
+                return;
+              }
+              var chunk;
+              try { chunk = JSON.parse(payloadText); } catch (e) { return; }
+              if (chunk && chunk.usage) finalUsage = chunk.usage;
+              var deltaContent =
+                chunk && chunk.choices && chunk.choices[0] && chunk.choices[0].delta
+                  ? chunk.choices[0].delta.content
+                  : null;
+              if (deltaContent) {
+                if (tFirst === null) tFirst = performance.now();
+                renderedText += deltaContent;
+                renderedPanel.textContent = renderedText;
+              }
+            });
+          }
+          function readChunk() {
+            if (sawDone) return;
+            return reader.read().then(function (result) {
+              if (result.done) return;
+              buffer += decoder.decode(result.value, { stream: true });
+              var parts = buffer.split('\n\n');
+              buffer = parts.pop();
+              Array.prototype.forEach.call(parts, processEvent);
+              return readChunk();
+            });
+          }
+          return readChunk().then(function () {
+            buffer += decoder.decode();
+            if (buffer) processEvent(buffer);
+          });
+        })
+        .then(function () {
+          var tEnd = performance.now();
+          var parsedUsage = parseUsage(finalUsage);
+          parsedUsage.usageMissing = noUsage(parsedUsage);
+          var metricsDiv = document.createElement('div');
+          metricsDiv.innerHTML = metricsHtml(
+            metricsFromTimes(tStart, tFirst, tEnd, parsedUsage.completion),
+            parsedUsage
+          );
+          result.appendChild(metricsDiv);
+          status.textContent = '';
+        })
+        .catch(function (error) {
+          if (error && error.isHttpError) {
+            renderTestError(container, error.response, error.text);
+          } else {
+            renderFetchError(container, error);
+          }
+          status.textContent = '';
+        });
+    });
+  }
+
   function mountModels(container) {
     var endpoint = get('endpoint');
     var key = get('key');
@@ -232,6 +617,32 @@
     });
   }
 
+  function settingsHeaderHtml() {
+    return (
+      '<span class="api-settings-label">Endpoint:</span> ' +
+      '<span class="api-config" data-field="endpoint"></span>' +
+      '<span class="api-settings-sep">·</span>' +
+      '<span class="api-settings-label">Key:</span> ' +
+      '<span class="api-config" data-field="key"></span>' +
+      '<a class="api-settings-link" href="#/settings">Settings</a>'
+    );
+  }
+
+  function mountSettingsHeader() {
+    // docsify v5 has no #docsify-container; section.content is the per-page wrapper.
+    var content = document.querySelector('main section.content');
+    if (!content) return;
+    var header = document.getElementById('api-settings-header');
+    if (!header) {
+      header = document.createElement('div');
+      header.id = 'api-settings-header';
+      header.className = 'api-settings-header';
+      content.insertBefore(header, content.firstChild);
+    }
+    header.innerHTML = settingsHeaderHtml();
+    refreshPlaceholders(header);
+  }
+
   function apiConfigPlugin(hook) {
     hook.doneEach(function () {
       refreshPlaceholders(document);
@@ -242,6 +653,12 @@
 
       var modelsContainer = document.querySelector('#api-models');
       if (modelsContainer) mountModels(modelsContainer);
+      var chatContainer = document.querySelector('#api-test-chat');
+      if (chatContainer) mountChat(chatContainer);
+      var streamContainer = document.querySelector('#api-test-stream');
+      if (streamContainer) mountStream(streamContainer);
+
+      mountSettingsHeader();
     });
   }
 

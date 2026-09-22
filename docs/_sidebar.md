@@ -2,3 +2,5 @@
 - [Guide](guide.md)
 - [Settings](settings.md)
 - [cURL](curl.md)
+- [Basic Chat](basic-chat.md)
+- [Streaming](streaming.md)

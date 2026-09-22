@@ -20,8 +20,13 @@
   color: inherit;
 }
 
+.api-config-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-mono-6);
+}
+
 .api-config-form button {
-  margin-top: 0.9rem;
   padding: 0.45rem 1.1rem;
   border: 1px solid var(--theme-color);
   border-radius: 4px;
@@ -29,6 +34,18 @@
   color: #fff;
   font-weight: 600;
   cursor: pointer;
+}
+
+.api-config-form .api-config-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.api-config-form .api-config-clear {
+  border-color: var(--border-color);
+  background: var(--color-bg);
+  color: inherit;
 }
 
 .api-config-form button:hover {
@@ -53,4 +70,133 @@
 
 .api-config[data-field='key'] {
   letter-spacing: 0.15em;
+}
+
+/* docsichat: global settings header + API test widgets (Basic Chat, Streaming) */
+
+/* Sticky settings header inside the docsify content column */
+.api-settings-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.85rem;
+  background: var(--color-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.api-settings-label,
+.api-settings-sep {
+  color: var(--color-mono-6);
+}
+
+.api-settings-label {
+  font-weight: 600;
+}
+
+.api-settings-link {
+  margin-left: auto;
+  color: var(--theme-color);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.api-settings-link:hover {
+  text-decoration: underline;
+}
+
+/* API test form (Basic Chat + Streaming pages) */
+.api-test-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 40rem;
+}
+
+.api-test-form label {
+  margin-top: 0.75rem;
+  font-weight: 600;
+}
+
+.api-test-form textarea,
+.api-test-form select {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: var(--color-bg);
+  color: inherit;
+}
+
+.api-test-form button[type='submit'] {
+  margin-top: 0.9rem;
+  align-self: flex-start;
+  padding: 0.45rem 1.1rem;
+  border: 1px solid var(--theme-color);
+  border-radius: 4px;
+  background: var(--theme-color);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.api-test-form button[type='submit']:hover {
+  filter: brightness(0.94);
+}
+
+.api-test-view {
+  display: inline-flex;
+  gap: 1rem;
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.api-test-view label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0;
+  font-weight: 400;
+}
+
+/* Metrics table (label / value rows) */
+.api-test-metrics {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  max-width: 26rem;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+.api-test-metrics dt {
+  color: var(--color-mono-6);
+}
+
+.api-test-metrics dd {
+  margin: 0;
+  font-family: 'Red Hat Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Response and raw SSE panels */
+.api-test-response,
+.api-test-raw {
+  max-height: 24rem;
+  overflow: auto;
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--color-bg);
+  font-family: 'Red Hat Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
