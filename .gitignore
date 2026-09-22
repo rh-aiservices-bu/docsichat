@@ -42,3 +42,4 @@ coverage/
 # --- Build output (docsify needs none, but guard against stray artifacts) ---
 dist/
 build/
+__pycache__/
