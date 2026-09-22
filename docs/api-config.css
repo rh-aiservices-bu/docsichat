@@ -13,19 +13,19 @@
 
 .api-config-form input {
   padding: 0.45rem 0.6rem;
-  border: 1px solid var(--docsify-border-color, #ccc);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 0.95rem;
-  background: var(--docsify-bg, #fff);
+  background: var(--color-bg);
   color: inherit;
 }
 
 .api-config-form button {
   margin-top: 0.9rem;
   padding: 0.45rem 1.1rem;
-  border: 1px solid var(--docsify-brand, #42b983);
+  border: 1px solid var(--theme-color);
   border-radius: 4px;
-  background: var(--docsify-brand, #42b983);
+  background: var(--theme-color);
   color: #fff;
   font-weight: 600;
   cursor: pointer;
@@ -37,16 +37,16 @@
 
 .api-config-status {
   font-size: 0.85rem;
-  color: var(--docsify-text-secondary, #7f8c8d);
+  color: var(--color-mono-6);
   margin-top: 0.5rem;
 }
 
 .api-config-empty {
-  color: var(--docsify-text-secondary, #7f8c8d);
+  color: var(--color-mono-6);
 }
 
 .api-config {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'Red Hat Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
   word-break: break-all;
 }

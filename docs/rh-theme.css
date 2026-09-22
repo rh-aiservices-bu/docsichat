@@ -1,0 +1,16 @@
+/*
+  docsichat: Red Hat theme. Load AFTER docsify core theme and BEFORE
+  themes/addons/core-dark.css — the dark addon overrides bg/text; this file
+  only sets mode-safe brand vars.
+*/
+@import url('https://fonts.googleapis.com/css2?family=Red+Hat+Text:ital,wght@0,400..700;1,400..700&family=Red+Hat+Mono:wght@400..700&family=Red+Hat+Display:wght@400..900&display=swap');
+
+:root {
+  /* Brand */
+  --theme-color: #ee0000; /* Red Hat brand red; theme-color-1..8 shades recompute automatically via color-mix() */
+
+  /* Typography */
+  --font-family           : 'Red Hat Text', 'Overpass', system-ui, sans-serif;
+  --font-family-mono      : 'Red Hat Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+  --sidebar-name-font-family: 'Red Hat Display', var(--font-family);
+}
