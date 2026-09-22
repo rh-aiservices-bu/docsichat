@@ -4,6 +4,12 @@ The command below lists the models available at your saved API endpoint. It call
 
 <div id="api-curl-command"></div>
 
+## Equivalent: run it here
+
+<div id="api-models"></div>
+
+Click **List models** to run the same request in your browser and display the returned model list.
+
 ## Notes
 
 - The URL comes from your [API Endpoint](settings.md) with `/models` appended.

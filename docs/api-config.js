@@ -121,7 +121,7 @@
 
   function curlCommand(keyValue) {
     return (
-      'curl -s ' + modelsUrl(get('endpoint')) + ' \\\n' +
+      'curl -sS "' + shellEscape(modelsUrl(get('endpoint'))) + '" \\\n' +
       '  -H "Authorization: Bearer ' + shellEscape(keyValue) + '"'
     );
   }
@@ -166,6 +166,72 @@
     });
   }
 
+  function formatModelError(error) {
+    var reason = error && error.message ? error.message : String(error);
+    return '<p class="api-config-empty">Request failed: ' + escapeHtml(reason) + '</p>';
+  }
+
+  function extractModels(payload) {
+    if (payload && Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload.models)) return payload.models;
+    return null;
+  }
+
+  function mountModels(container) {
+    var endpoint = get('endpoint');
+    var key = get('key');
+    if (!endpoint || !key) {
+      container.innerHTML =
+        '<p class="api-config-empty">Set your <a href="#/settings">API Endpoint and API Key</a> first — this needs both.</p>';
+      return;
+    }
+    container.innerHTML =
+      '<button type="button" class="api-models-run">List models</button>' +
+      '<pre class="api-models-pre" hidden></pre>' +
+      '<p class="api-config-status" role="status"></p>';
+
+    container.querySelector('.api-models-run').addEventListener('click', function () {
+      var pre = container.querySelector('.api-models-pre');
+      var status = container.querySelector('.api-config-status');
+      var button = container.querySelector('.api-models-run');
+      button.disabled = true;
+      button.textContent = 'Listing…';
+      fetch(modelsUrl(endpoint), { headers: { Authorization: 'Bearer ' + key } })
+        .then(function (response) {
+          return response.text().then(function (text) {
+            if (!response.ok) {
+              throw new Error('HTTP ' + response.status + ' ' + response.statusText + (text ? ' — ' + text.slice(0, 200) : ''));
+            }
+            var payload;
+            try { payload = JSON.parse(text); } catch (e) { throw new Error('Non-JSON response: ' + text.slice(0, 200)); }
+            return payload;
+          });
+        })
+        .then(function (payload) {
+          var models = extractModels(payload);
+          if (!models) {
+            pre.hidden = false;
+            pre.textContent = JSON.stringify(payload, null, 2);
+            status.textContent = 'Unrecognized response shape — raw body below.';
+            return;
+          }
+          var names = models.map(function (model) { return model && (model.id || model.name); }).filter(Boolean);
+          pre.hidden = false;
+          pre.textContent = names.length ? names.join('\n') : '(no models returned)';
+          status.textContent = models.length + ' model(s).';
+        })
+        .catch(function (error) {
+          pre.hidden = true;
+          status.innerHTML = formatModelError(error);
+        })
+        .then(function () {
+          button.disabled = false;
+          button.textContent = 'List models';
+        });
+    });
+  }
+
   function apiConfigPlugin(hook) {
     hook.doneEach(function () {
       refreshPlaceholders(document);
@@ -173,6 +239,9 @@
       if (container) mountForm(container);
       var curlContainer = document.querySelector('#api-curl-command');
       if (curlContainer) mountCurl(curlContainer);
+
+      var modelsContainer = document.querySelector('#api-models');
+      if (modelsContainer) mountModels(modelsContainer);
     });
   }
 
