@@ -97,6 +97,7 @@
       '<div class="api-config-actions">' +
       '<button type="submit">Save</button>' +
       (hasAny ? '<button type="button" class="api-config-clear">Clear</button>' : '') +
+      '<button type="button" class="api-config-test">Test connection</button>' +
       '</div>' +
       '<p class="api-config-status" role="status"></p>' +
       '</form>'
@@ -144,13 +145,12 @@
     form.addEventListener('submit', function (event) {
       event.preventDefault();
       var keyInput = container.querySelector('#api-config-key');
-      var status = container.querySelector('.api-config-status');
 
       // Untouched preview input keeps the stored URL; any typed value replaces it.
       var endpointValue = endpointInput.hasAttribute('data-preview')
         ? get('endpoint')
         : endpointInput.value;
-      set('endpoint', endpointValue.trim());
+      set('endpoint', normalizeEndpoint(endpointValue.trim()));
       // Empty key field keeps the existing key; typing replaces it.
       if (keyInput.value) {
         set('key', keyInput.value);
@@ -162,14 +162,29 @@
       refreshPlaceholders(document);
       container.querySelector('.api-config-status').textContent =
         'Saved locally. Only the first 10 characters of the API key are ever displayed.';
-      // Unobtrusive reminder: OpenAI-compatible base URLs usually end in /v1.
-      var savedEndpoint = get('endpoint');
-      var hint = container.querySelector('.api-config-hint');
-      if (hint && savedEndpoint && !/\/v\d+(\/)?$/.test(savedEndpoint)) {
-        hint.textContent = 'Hint: OpenAI-compatible API URLs usually end in /v1 (e.g. https://api.example.com/v1).';
-        hint.hidden = false;
-      }
     });
+
+    var testBtn = container.querySelector('.api-config-test');
+    if (testBtn) {
+      testBtn.addEventListener('click', function () {
+        var endpoint = get('endpoint');
+        var key = get('key');
+        var status = container.querySelector('.api-config-status');
+        if (!endpoint || !key) {
+          status.textContent = 'Save an endpoint and API key first — the test uses the saved values.';
+          return;
+        }
+        testBtn.disabled = true;
+        testBtn.textContent = 'Testing…';
+        checkConnection(endpoint, key, function (result) {
+          testBtn.disabled = false;
+          testBtn.textContent = 'Test connection';
+          status.textContent = result.ok
+            ? 'Connected — ' + result.models.length + ' model(s) at ' + normalizeEndpoint(endpoint) + '.'
+            : 'Connection failed: ' + result.reason;
+        });
+      });
+    }
   }
 
   function shellEscape(value) {
@@ -178,7 +193,7 @@
   }
 
   function modelsUrl(endpoint) {
-    return endpoint.replace(/\/+$/, '') + '/models';
+    return normalizeEndpoint(endpoint).replace(/\/+$/, '') + '/models';
   }
 
   function curlCommand(keyValue) {
@@ -240,17 +255,18 @@
     return null;
   }
 
-  function chatCompletionUrl(endpoint) {
-    return endpoint.replace(/\/+$/, '') + '/chat/completions';
+  function normalizeEndpoint(endpoint) {
+    // OpenAI-compatible base URLs include a path segment (e.g. /v1). Bare hosts
+    // get /v1 appended; endpoints with any other path are preserved as-is.
+    var trimmed = String(endpoint || '').trim().replace(/\/+$/, '');
+    if (!trimmed) return trimmed;
+    return trimmed.indexOf('/', trimmed.indexOf('//') + 2) === -1 ? trimmed + '/v1' : trimmed;
   }
 
-  function normalizeModelId(model) {
-    if (typeof model !== 'string' || model.indexOf('/') === -1) return model;
-    return model.slice(model.lastIndexOf('/') + 1);
-  }
-
-  function listModelsForSelect(endpoint, key, selectEl, done) {
-    fetch(modelsUrl(endpoint), { headers: { Authorization: 'Bearer ' + key } })
+  function checkConnection(endpoint, key, done) {
+    fetch(modelsUrl(normalizeEndpoint(endpoint)), {
+      headers: { Authorization: 'Bearer ' + key }
+    })
       .then(function (response) {
         return response.text().then(function (text) {
           if (!response.ok) {
@@ -258,35 +274,71 @@
           }
           var payload;
           try { payload = JSON.parse(text); } catch (e) { throw new Error('Non-JSON response: ' + text.slice(0, 200)); }
-          return payload;
+          return { httpStatus: response.status, models: extractModels(payload) || [] };
         });
       })
-      .then(function (payload) {
-        var models = extractModels(payload);
-        var names = (models || [])
+      .then(function (result) {
+        done({ ok: true, httpStatus: result.httpStatus, models: result.models });
+      })
+      .catch(function (error) {
+        var reason = error && error.message ? error.message : String(error);
+        if (error instanceof TypeError) {
+          reason = 'Failed to fetch — network or CORS blocked';
+        }
+        done({ ok: false, reason: reason });
+      });
+  }
+
+  function chatCompletionUrl(endpoint) {
+    return normalizeEndpoint(endpoint).replace(/\/+$/, '') + '/chat/completions';
+  }
+
+  function normalizeModelId(model) {
+    if (typeof model !== 'string' || model.indexOf('/') === -1) return model;
+    return model.slice(model.lastIndexOf('/') + 1);
+  }
+
+  function renderModelRetry(container, selectEl, endpoint, key) {
+    var parent = selectEl.parentNode;
+    if (!parent) return;
+    var retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'api-models-retry';
+    retry.textContent = 'Retry';
+    parent.insertBefore(retry, selectEl.nextSibling);
+    retry.addEventListener('click', function () {
+      listModelsForSelect(endpoint, key, selectEl, null);
+    });
+  }
+
+  function listModelsForSelect(endpoint, key, selectEl, done) {
+    checkConnection(endpoint, key, function (status) {
+      selectEl.innerHTML = '';
+      if (!status.ok) {
+        // The reason is the diagnostic: CORS, 401, typo — surface it verbatim.
+        selectEl.appendChild(new Option('Model list unavailable — ' + status.reason, '', true, true));
+        selectEl.options[0].disabled = true;
+        renderModelRetry(selectEl.parentNode, selectEl, endpoint, key);
+      } else {
+        // Option value = full model id (RHOAI needs namespace/name for the request);
+        // label = short display name only.
+        var ids = status.models
           .map(function (model) { return model && (model.id || model.name); })
-          .filter(Boolean)
-          .map(normalizeModelId);
-        selectEl.innerHTML = '';
+          .filter(Boolean);
         selectEl.appendChild(new Option('— select a model —', '', true, true));
-        if (!names.length) {
+        if (!ids.length) {
           selectEl.appendChild(new Option('No models returned', '', false, false));
           selectEl.options[0].disabled = true;
           selectEl.options[1].disabled = true;
         } else {
           selectEl.options[0].disabled = true;
-          Array.prototype.forEach.call(names, function (name) {
-            selectEl.appendChild(new Option(name, name, false, false));
+          Array.prototype.forEach.call(ids, function (id) {
+            selectEl.appendChild(new Option(normalizeModelId(id), id, false, false));
           });
-          selectEl.options[0].disabled = true;
         }
-      })
-      .catch(function (error) {
-        selectEl.innerHTML = '';
-        selectEl.appendChild(new Option('Model list unavailable', '', true, true));
-        selectEl.options[0].disabled = true;
-      })
-      .then(function () { if (done) done(); });
+      }
+      if (done) done();
+    });
   }
 
   function parseUsage(usage) {
