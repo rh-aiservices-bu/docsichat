@@ -17,6 +17,7 @@ Click **List models** to run the same request in your browser and display the re
 
 ## If the browser can't reach your endpoint
 
-- **`TypeError: Failed to fetch`** in any widget means the request was blocked by the network or by CORS, not by authentication. The same request from a terminal usually works, because CORS only binds browsers.
+- **`TypeError: Failed to fetch`** in any widget means the request never got through — blocked by the network, by CORS, or by an auth layer that rejects the browser's preflight. The same request from a terminal usually works, because CORS only binds browsers.
 - Browser fetches that send `Authorization` or `Content-Type` headers force a CORS preflight that the server must answer; a server that never answers the preflight can never serve a browser, no matter how correct the endpoint and key are.
 - If your endpoint (for example an OpenShift AI model route) does not send CORS headers, use the curl commands on this page as the fallback for RHOAI endpoints.
+- A Kuadrant/AuthPolicy-protected route (for example some OpenShift AI MaaS gateways) may reject the CORS preflight itself with 401 — the browser then shows `TypeError: Failed to fetch` no matter how correct the endpoint and key are. The commands on this page are the working path for such endpoints.
