@@ -43,6 +43,8 @@ stale within a day once already). File references: the settings page is now
 14. **Streaming render perf.** Queued — candidate for PluginP3 chain link.
 15. **"Interpreting your metrics" note.** In progress — StreamWidget agent (streaming.md prose).
 16. **Storage-failure warning.** Queued — StateCache chain link.
+## P3 — lower fit / hardening
+
 17. **Model metadata.** Show `owned_by`/`created` from `/models` next to names. Demoted — near-zero participant value.
 18. **Curl variants for chat completions.** `curl.md` only generates the `GET {endpoint}/models` command; add generated basic/streaming completion curl from the saved prompt/model. Demoted — learning the API shape was not a chosen use; keep for docs+curl-twin completeness.
 19. **Raw-JSON toggle on chat results.** Demoted — see the raw-view decision (P1 item 5); only revisit if debugging demands it.
