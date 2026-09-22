@@ -68,14 +68,40 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: <HTTPROUTE_NAME>
-  defaults:
-    strategy: merge                # coexist with MaaS-owned policies
-    rules:
-      authentication:
-        anonymous:
-          anonymous: {}            # documented no-op identity evaluator
-          when:
-          - predicate: "request.method == 'OPTIONS'"   # anonymous FOR PREFLIGHTS ONLY — real traffic keeps MaaS auth
+  rules:
+    authentication:
+      anonymous:                       # rule name (map key)
+        anonymous: {}                  # the anonymous method
+        when:                          # rule-level condition (AuthRuleCommon, inline)
+        - predicate: "request.method == 'OPTIONS'"
+```
+
+Why this shape (verified against the CRD reference at
+https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/doc/reference/authpolicy.md,
+fetched 2026-09-22):
+- Top-level `spec.rules` + rule-level `when` — for a policy targeting an HTTPRoute,
+  `defaults`/`overrides` are the WRONG container: the CRD is explicit that they are
+  "Used in policies that target a Gateway object to express default rules for routes
+  that lack a more specific policy". `defaults` is also mutually exclusive with
+  top-level `spec.rules`/`spec.when`. The rule-level `when` is documented inline on
+  auth rules (AuthRuleCommon).
+- NO `strategy: merge` field exists — earlier drafts of this howto fabricated it.
+  Multiple AuthPolicies on one target combine automatically: authentication rules
+  are OR ("At least one config MUST evaluate to a valid identity object"), so this
+  rule passing is enough even with the MaaS deny policy attached. K8s prunes unknown
+  fields silently.
+- [INFERENCE] `predicate:` as the inner expression key and `request.method` come from
+  Kuadrant RFC 0002 (well-known attributes; request.method is Auth-available per the
+  table at
+  https://raw.githubusercontent.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md).
+
+Before applying, check the cluster's actual CRD — it is the ground truth if the
+installed Kuadrant version differs from main-branch docs:
+
+```sh
+oc explain authpolicy.spec.rules          # expect rules at top level for HTTPRoute targets
+oc explain authpolicy.spec.defaults       # expect "Used in policies that target a Gateway"
+oc explain authpolicy.spec.rules.authentication  # expect anonymous + when fields
 ```
 
 Apply and verify the preflight is no longer 401:
@@ -88,21 +114,16 @@ curl -sS -o /dev/null -D - -X OPTIONS "https://<HOST>/prelude-maas/<model>/chat/
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: authorization, content-type" | tr -d '\r'
 # EXPECT: not 401 (200 or 204). If still 401: the MaaS gateway-default AuthPolicy
-# is winning — check `oc get authpolicy -n <GATEWAY_NS> -o yaml` for merge/override
-# precedence, or target the Gateway itself instead of the HTTPRoute.
+# may not be OR-combining with this one — check `oc get authpolicy -n <GATEWAY_NS> -o yaml`
+# and the Authorino pod logs for the evaluated rules.
 ```
 
-If the merge is ignored, try `overrides:` instead of `defaults:` (documented
-precedence semantics: overrides win over lower-targeting policies), or scope to the
-Gateway targetRef. [INFERENCE: (a) MaaS controller reconciliation behavior with a
-second AuthPolicy on the same target is not doc-verified; (b) the rule-level `when`
-predicate semantics (per-rule condition inside a defaults rule) come from the
-scout's read of the Kuadrant AuthPolicy CRD reference
-(https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/reference/authpolicy.md)
-and the anonymous-access user guide
-(https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/user-guides/auth/anonymous-access.md) —
-kuadrant.io itself 404'd on later re-checks, so re-source from these GitHub URLs
-if the rule-level `when` placement is rejected by the CRD.]
+If the preflight is still 401 after this, the remaining lever is a Gateway-targeting
+policy — but that requires `defaults`/`overrides` (Gateway-targeting shape), which
+would make anonymous access the default for ALL routes on the gateway: do not do
+that on a shared cluster. Prefer investigating the OR-combination behavior first
+(Authorino logs) or the proxy approach (end of this document).
+
 
 ## Step 2 — add CORS response headers (EnvoyFilter)
 
@@ -158,7 +179,14 @@ CRD fields):** add to the AuthPolicy from Step 1 (or the MaaS-owned one, accepti
 it may be reverted):
 
 ```yaml
-  defaults:
+# Inside the Step-1 AuthPolicy spec (HTTPRoute target → top-level rules.response,
+# NOT defaults — same CRD rule as above). Merge with the anonymous rule:
+  rules:
+    authentication:
+      anonymous:
+        anonymous: {}
+        when:
+        - predicate: "request.method == 'OPTIONS'"
     response:
       unauthenticated:
         headers:
@@ -169,6 +197,10 @@ it may be reverted):
           access-control-allow-headers:
             value: "authorization, content-type"
 ```
+
+(`response.unauthenticated` and its `headers` are documented CRD fields —
+CustomDenialStatus: "Customizations on the denial status and other HTTP attributes
+when the request is unauthenticated. (Default: 401 Unauthorized)".)
 
 This makes at least the 401 carry CORS headers (error bodies readable in-browser);
 it does NOT add headers to success responses — success-response CORS needs the
