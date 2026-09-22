@@ -388,6 +388,11 @@
 
   function formatModelError(error) {
     var reason = error && error.message ? error.message : String(error);
+    // 'Failed to fetch' is a TypeError from a blocked preflight or dead network —
+    // the Kuadrant-class gateway case where curl works but the browser cannot.
+    if (error instanceof TypeError) {
+      reason = 'Failed to fetch — network or CORS blocked (auth layers that reject the browser preflight cause this too; curl from a terminal still works)';
+    }
     return '<p class="api-config-empty">Request failed: ' + escapeHtml(reason) + '</p>';
   }
 
